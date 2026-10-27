@@ -19,7 +19,7 @@
   "scripts": {
     "build": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/build-wasm.ps1",
     "demo": "python -m http.server 8000 --directory .",
-    "prepublishOnly": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/sync-version.ps1"
+    "prepublishOnly": "node ../scripts/sync-version.mjs"
   },
   "repository": {
     "type": "git",

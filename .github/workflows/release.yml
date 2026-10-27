@@ -100,14 +100,15 @@ jobs:
             (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish]'))
           )
 
-      # npm 包：wasm/package.json 版本已由 Bump 步骤同步；publish 前再跑 sync-version 兜底（幂等）
+      # npm 包：wasm/package.json 版本已由 Bump 步骤同步；
+      # --ignore-scripts 跳过 prepublishOnly（CI 为 Linux sh，不依赖 node 脚本；本地手动发布时 hook 仍会跑 node 同步）
       - name: Publish npm package
         working-directory: wasm
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           npm config set //registry.npmjs.org/:_authToken "${NPM_TOKEN}"
-          npm publish --registry https://registry.npmjs.org
+          npm publish --registry https://registry.npmjs.org --ignore-scripts
         if: |
           env.NPM_TOKEN != '' &&
           (
