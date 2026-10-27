@@ -89,7 +89,7 @@ fn favicon_zip_entries() {
     let zip = to_favicon_zip("Binx Bond");
     let mut reader = zip::ZipArchive::new(std::io::Cursor::new(zip)).expect("zip 解析失败");
     let names: Vec<String> = (0..reader.len())
-        .map(|i| reader.by_index(i).unwrap().name().to_string())
+        .map(|i| reader.by_index(i).unwrap().name().unwrap().to_string())
         .collect();
     assert_eq!(names.len(), 6);
     assert_eq!(names[0], "avatar-16.png");

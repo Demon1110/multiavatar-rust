@@ -2,7 +2,7 @@
 name = "multiavatar"
 version = "1.0.0"
 edition = "2021"
-description = "Multiavatar pure Rust implementation — 移植自 multiavatar.js（Gie Katon），确定性多文化头像生成器，零运行时文件依赖"
+description = "Deterministic multicultural avatar generator — pure Rust port of multiavatar.js with SVG/PNG/JPEG/GIF/favicon/ICO/data-URI outputs; part library embedded in the binary, no runtime files"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/Demon1110/multiavatar-rust"

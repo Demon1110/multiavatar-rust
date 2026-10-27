@@ -1,0 +1,95 @@
+# Release workflow：push 到 main 自动递增 patch 版本并发版；
+# 手动触发可指定 minor / major（Release → Run workflow → Version bump）。
+# 版本递增提交带 [skip ci]，避免自身提交再次触发本 workflow。
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: "版本递增类型（push 自动触发时固定为 patch）"
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # ---- 1. 递增版本号（Cargo.toml + Cargo.lock 同步）----
+      - name: Bump version
+        id: next_version
+        run: |
+          KIND="${{ github.event.inputs.version_bump || 'patch' }}"
+          python3 - "$KIND" <<'EOF'
+          import re, sys
+          kind = sys.argv[1]
+          toml = open('Cargo.toml', encoding='utf-8').read()
+          v = re.search(r'^version\s*=\s*"([^"]+)"', toml, re.M).group(1)
+          maj, minor, patch = map(int, v.split('.'))
+          if kind == 'major':
+              maj, minor, patch = maj + 1, 0, 0
+          elif kind == 'minor':
+              minor, patch = minor + 1, 0
+          else:
+              patch += 1
+          nv = f'{maj}.{minor}.{patch}'
+          open('Cargo.toml', 'w', encoding='utf-8', newline='').write(
+              toml.replace('version = "' + v + '"', 'version = "' + nv + '"', 1))
+          print(nv)
+          EOF
+          # 让 cargo 重算并同步 Cargo.lock 里的包版本
+          cargo metadata --no-deps --format-version 1 >/dev/null
+          echo "version=$(grep -m1 '^version' Cargo.toml | cut -d'\"' -f2)" >> "$GITHUB_OUTPUT"
+
+      # ---- 2. 提交版本变更 + 打 tag（[skip ci] 防循环）----
+      - name: Commit and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock
+          git commit -m "release: v${{ steps.next_version.outputs.version }} [skip ci]"
+          git tag "v${{ steps.next_version.outputs.version }}"
+          git push origin HEAD:main
+          git push origin "v${{ steps.next_version.outputs.version }}"
+
+      # ---- 3. 打包校验 + 发布 crates.io（未配 token 时跳过）----
+      - name: Package verify
+        run: cargo package --allow-dirty
+
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --registry crates-io
+        if: env.CARGO_REGISTRY_TOKEN != ''
+
+      # ---- 4. 构建可运行 demo 二进制并打 Release（附 .crate 源码包）----
+      - name: Build demo binary
+        run: cargo build --release --example demo --locked
+
+      - name: Create GitHub Release
+        run: |
+          gh release create "v${{ steps.next_version.outputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --title "v${{ steps.next_version.outputs.version }}" \
+            --generate-notes \
+            target/package/multiavatar-*.crate \
+            target/release/examples/demo
