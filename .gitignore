@@ -1,0 +1,18 @@
+# Rust 构建产物
+/target
+
+# 演示运行产物（cargo run --example demo 生成：10 组头像 + favicon + 预览图）
+/demo/
+
+# 库 crate 惯例忽略 Cargo.lock（如需锁定依赖版本，注释掉下一行）
+Cargo.lock
+
+# IDE / 编辑器
+.idea/
+.vscode/
+*.iml
+*.swp
+
+# 系统文件
+.DS_Store
+Thumbs.db
