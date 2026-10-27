@@ -1,6 +1,6 @@
 {
   "name": "@w916797724/multiavatar",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Deterministic multicultural avatar generator (Rust/WASM port of multiavatar.js). Generate SVG/PNG/JPEG/GIF/favicon from any string in the browser — same bytes as the server-side Rust library.",
   "type": "module",
   "main": "dist/multiavatar.js",
