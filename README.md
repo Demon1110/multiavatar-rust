@@ -192,7 +192,7 @@ cargo build --release   # LTO + codegen-units=1 + strip（体积优化）
 
 ```bash
 cd wasm && npm run build    # cargo build --target wasm32-unknown-unknown + wasm-bindgen → wasm/dist
-npm run demo                # 本地 demo：http://localhost:8000/demo.html
+npm run demo                # 本地 demo：http://localhost:8000/src/demo.html（服务根=wasm/）
 npm publish                 # 发布 npm 包（name: multiavatar，npm 原名可用）
 ```
 

@@ -58,7 +58,7 @@ const png = toPng("demon1110", 256);             // Uint8Array → Blob / URL.cr
 ## 本地 demo
 
 ```bash
-npm run demo    # http://localhost:8000/demo.html
+npm run demo    # 服务根 = wasm/（demo.js 里的 ../dist 才能解析）；打开 http://localhost:8000/src/demo.html
 ```
 
 ## npm 发布
