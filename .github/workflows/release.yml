@@ -34,34 +34,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      # ---- 1. 递增版本号（Cargo.toml + Cargo.lock 同步）----
+      # ---- 1. 递增版本号（纯 bash，无 heredoc/python，避免引号转义坑）----
       - name: Bump version
         id: next_version
         run: |
           KIND="${{ github.event.inputs.version_bump || 'patch' }}"
-          python3 - "$KIND" <<'EOF'
-          import re, sys
-          kind = sys.argv[1]
-          toml = open('Cargo.toml', encoding='utf-8').read()
-          v = re.search(r'^version\s*=\s*"([^"]+)"', toml, re.M).group(1)
-          maj, minor, patch = map(int, v.split('.'))
-          if kind == 'major':
-              maj, minor, patch = maj + 1, 0, 0
-          elif kind == 'minor':
-              minor, patch = minor + 1, 0
-          else:
-              patch += 1
-          nv = f'{maj}.{minor}.{patch}'
-          open('Cargo.toml', 'w', encoding='utf-8', newline='').write(
-              toml.replace('version = "' + v + '"', 'version = "' + nv + '"', 1))
-          print(nv)
-          EOF
-          # 让 cargo 重算并同步 Cargo.lock 里的包版本
+          [ -z "$KIND" ] && KIND=patch
+          VER="$(grep -m1 '^version' Cargo.toml | cut -d '"' -f2)"
+          IFS=. read -r MAJ MIN PAT <<< "$VER"
+          if [ "$KIND" = "major" ]; then MAJ=$((MAJ+1)); MIN=0; PAT=0
+          elif [ "$KIND" = "minor" ]; then MIN=$((MIN+1)); PAT=0
+          else PAT=$((PAT+1)); fi
+          NV="$MAJ.$MIN.$PAT"
+          sed -i "s/^version = .*/version = \"$NV\"/" Cargo.toml
           cargo metadata --no-deps --format-version 1 >/dev/null
-          echo "version=$(grep -m1 '^version' Cargo.toml | cut -d'\"' -f2)" >> "$GITHUB_OUTPUT"
+          echo "version=$NV" >> "$GITHUB_OUTPUT"
 
-      # ---- 2. 提交版本变更 + 打 tag（[skip ci] 防循环）----
+      # ---- 2. 提交版本变更 + 打 tag（[skip ci] 防循环；version 空则跳过）----
       - name: Commit and tag
+        if: steps.next_version.outputs.version != ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -90,6 +81,8 @@ jobs:
         run: cargo build --release --example demo
 
       - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "v${{ steps.next_version.outputs.version }}" \
             --repo "${{ github.repository }}" \
