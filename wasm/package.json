@@ -1,0 +1,38 @@
+{
+  "name": "multiavatar",
+  "version": "1.0.4",
+  "description": "Deterministic multicultural avatar generator (Rust/WASM port of multiavatar.js). Generate SVG/PNG/JPEG/GIF/favicon from any string in the browser — same bytes as the server-side Rust library.",
+  "type": "module",
+  "main": "dist/multiavatar.js",
+  "module": "dist/multiavatar.js",
+  "types": "dist/multiavatar.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/multiavatar.d.ts",
+      "import": "./dist/multiavatar.js"
+    }
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/build-wasm.ps1",
+    "demo": "python -m http.server 8000 --directory src"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Demon1110/multiavatar-rust.git"
+  },
+  "homepage": "https://github.com/Demon1110/multiavatar-rust",
+  "license": "MIT",
+  "keywords": [
+    "avatar",
+    "identicon",
+    "multiavatar",
+    "svg",
+    "png",
+    "wasm",
+    "deterministic"
+  ]
+}

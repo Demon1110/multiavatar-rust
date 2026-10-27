@@ -184,6 +184,31 @@ cargo build --release   # LTO + codegen-units=1 + strip（体积优化）
 
 依赖（允许常用 crate，均纯跨平台）：`flate2 crc32fast roxmltree tiny-skia jpeg-encoder gif`。SHA-256、SVG 体积优化器、PNG 编码器、ZIP 打包器、base64 与 LRU 缓存均为手写实现（零正则/零哈希/零 png/零 zip/零 base64/零 lru crate 依赖；png/zip/base64 仅作为 dev-dependencies 供测试独立解码验证）。
 
+## WASM / npm（浏览器端生成）
+
+全部依赖纯 Rust 无系统依赖，可编译到 `wasm32-unknown-unknown`，浏览器端输出与服务端 Rust **逐字节一致**。前端包位于 `wasm/`（标准前端结构：`src/` 源码 + demo、`dist/` 构建产物、`package.json` npm 清单）；打包命令位于根级 `scripts/build-wasm.ps1`（与 `wasm/` 同级）。
+
+构建与发布：
+
+```bash
+cd wasm && npm run build    # cargo build --target wasm32-unknown-unknown + wasm-bindgen → wasm/dist
+npm run demo                # 本地 demo：http://localhost:8000/demo.html
+npm publish                 # 发布 npm 包（name: multiavatar，npm 原名可用）
+```
+
+浏览器使用：
+
+```js
+import init, { toSvg, toPng } from "multiavatar"; // 或本地 dist/multiavatar.js
+await init();
+const svg = toSvg("demon1110");
+const png = toPng("demon1110", 256); // Uint8Array → Blob/URL.createObjectURL
+```
+
+JS API：`toSvg(input)`、`toPng(input, size)`、`toJpg(input, size)`、`toGif(input, size)`、`toDataUri(input, size)`、`toFaviconZip(input)`、`toFaviconIco(input)`（TS 类型见 `wasm/dist/multiavatar.d.ts`）。
+
+体积：`multiavatar_bg.wasm` ≈ 594 KB（gzip 后 ≈ 232 KB），建议动态 import 按需加载。
+
 ---
 
 ## 许可 License

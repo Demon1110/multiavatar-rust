@@ -1,0 +1,10 @@
+# Node / 前端依赖
+node_modules/
+npm-debug.log*
+
+# 构建产物（wasm-bindgen 输出；发布时单独 cd wasm && npm publish）
+dist/
+wasm/
+
+# 本地服务缓存
+__pycache__/

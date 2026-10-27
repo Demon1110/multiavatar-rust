@@ -440,3 +440,65 @@ mod tests {
         assert!(!to_jpg_smooth_sized(input, 64).is_empty());
     }
 }
+
+// ── wasm32 导出（wasm-bindgen；原生目标不编译）──
+#[cfg(target_arch = "wasm32")]
+#[allow(non_snake_case)] // JS API 刻意用 camelCase 命名
+pub mod wasm {
+    //! 浏览器/Node 可用的 JS 绑定：输入字符串 → SVG/PNG/JPEG/GIF/favicon 字节。
+    //! 使用方式（wasm-pack --target web 后）：
+    //! ```js
+    //! import init, { toSvg, toPng } from "./pkg/multiavatar.js";
+    //! await init();
+    //! const svg = toSvg("demon1110");
+    //! const png = toPng("demon1110", 256); // Uint8Array
+    //! ```
+    use wasm_bindgen::prelude::*;
+
+    use crate::{
+        multiavatar, to_data_uri_sized, to_favicon_ico, to_favicon_zip, to_gif_sized,
+        to_jpg_sized, to_png_sized,
+    };
+
+    /// 生成 SVG 文本。
+    #[wasm_bindgen]
+    pub fn toSvg(input: &str) -> String {
+        multiavatar(input)
+    }
+
+    /// 生成 PNG 字节（Uint8Array）。size 为边长像素，默认建议 256。
+    #[wasm_bindgen]
+    pub fn toPng(input: &str, size: u32) -> Vec<u8> {
+        to_png_sized(input, size)
+    }
+
+    /// 生成 JPEG 字节（Uint8Array，白底）。
+    #[wasm_bindgen]
+    pub fn toJpg(input: &str, size: u32) -> Vec<u8> {
+        to_jpg_sized(input, size)
+    }
+
+    /// 生成 GIF 字节（Uint8Array，多帧动画）。
+    #[wasm_bindgen]
+    pub fn toGif(input: &str, size: u32) -> Vec<u8> {
+        to_gif_sized(input, size)
+    }
+
+    /// 生成 PNG data URI 字符串。
+    #[wasm_bindgen]
+    pub fn toDataUri(input: &str, size: u32) -> String {
+        to_data_uri_sized(input, size)
+    }
+
+    /// 生成多尺寸 favicon 的 ZIP 字节（Uint8Array）。
+    #[wasm_bindgen]
+    pub fn toFaviconZip(input: &str) -> Vec<u8> {
+        to_favicon_zip(input)
+    }
+
+    /// 生成多尺寸 favicon 的 ICO 字节（Uint8Array）。
+    #[wasm_bindgen]
+    pub fn toFaviconIco(input: &str) -> Vec<u8> {
+        to_favicon_ico(input)
+    }
+}

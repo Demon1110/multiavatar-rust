@@ -10,6 +10,9 @@ homepage = "https://github.com/Demon1110/multiavatar-rust"
 keywords = ["avatar", "identicon", "svg", "png", "multiavatar"]
 categories = ["multimedia::images", "graphics"]
 
+[lib]
+crate-type = ["cdylib", "rlib"]   # cdylib：wasm 发布（wasm-pack）；rlib：原生库/demo
+
 [dependencies]
 flate2 = "1.1.10"               # gzip 数据资源解压 + PNG IDAT zlib 压缩（默认 rust_backend=miniz_oxide 最省）
 crc32fast = "1.5.3"             # PNG chunk / ZIP 条目 CRC32
@@ -22,6 +25,10 @@ gif = "0.14.2"               # GIF 编码（多帧动画）
 png = "0.18.1"               # 仅测试：独立解码验证手写 PNG 编码器
 zip = { version = "9.1.2", default-features = false, features = ["deflate-flate2"] }   # 仅测试：独立解析验证手写 ZIP；flate2 后端跟随默认（miniz_oxide），避免 deflate 特性强拉 zlib-rs
 base64 = "0.23.1"            # 仅测试：独立解码验证手写 base64 编码器
+
+# 仅 wasm32：wasm-bindgen JS 绑定（原生构建不引入）
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
 
 [profile.release]
 lto = true
