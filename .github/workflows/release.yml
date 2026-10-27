@@ -106,8 +106,9 @@ jobs:
             (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish]'))
           )
 
-      # npm 包（stage 模式）：wasm/package.json 版本已由 Bump 步骤同步；
-      # --ignore-scripts 跳过 prepublishOnly（版本已同步；CI 无需再跑 node 脚本）。
+      # npm 包（stage 模式）：wasm/package.json 版本已由 Bump 步骤同步。
+      # npm stage publish 是 npm 12+ 命令（npmjs 2026 新发布流程），CI 镜像自带 npm 10/11 没有，
+      # 故用 npx npm@12 显式调用；prepublishOnly（node 同步脚本）幂等无害。
       # stage 发布后需 maintainer（2FA）promote 才正式可见：
       #   网页：https://www.npmjs.com/package/@w916797724/multiavatar → Staged releases → Approve
       #   命令行：npm stage promote --package @w916797724/multiavatar --version <版本>
@@ -117,7 +118,7 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           npm config set //registry.npmjs.org/:_authToken "${NPM_TOKEN}"
-          npm stage publish --registry https://registry.npmjs.org --ignore-scripts
+          npx -y npm@12 stage publish --registry https://registry.npmjs.org
         if: |
           env.NPM_TOKEN != '' &&
           (
