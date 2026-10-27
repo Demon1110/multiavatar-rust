@@ -87,7 +87,8 @@ jobs:
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --registry crates-io
+        # --allow-dirty：版本号已由 Bump 修改但 Commit and tag 在全部发布成功后才执行（设计使然）
+        run: cargo publish --registry crates-io --allow-dirty
         if: |
           env.CARGO_REGISTRY_TOKEN != '' &&
           (
