@@ -45,6 +45,13 @@ let png = to_png("demon1110");
 // JPEG / GIF / data URI
 let jpg = to_jpg("Binx Bond");
 let gif = to_gif("Binx Bond");          // 部件逐帧淡入动画
+
+// 大尺寸输出（无锯齿的最直接方式）
+let png_hi = to_png_sized("Binx Bond", 1024);
+
+// SSAA 超采样抗锯齿：256 尺寸下边缘更平滑（4x 渲染后双线性缩小）
+let png_smooth = to_png_smooth("Binx Bond");        // 256，默认 4x
+let png_smooth_512 = to_png_smooth_sized("Binx Bond", 512);
 let uri = to_data_uri("Binx Bond");     // data:image/png;base64,...
 
 // favicon 包
@@ -85,6 +92,7 @@ cargo run --example demo     # 输出到 demo/（10 组 × svg/png/jpg/gif + fav
 | `avatar(input)` / `avatar_with(input, options)` | `Multiavatar.avatar(...)` | 不可变产物（SVG + 惰性解析缓存） |
 | `to_png / to_jpg / to_gif`(+`_sized`) | `toPng / toJpg / toGif` | 字节输出 |
 | `to_image`(+`_sized`) | `toImage` | tiny-skia `Pixmap`（可继续加工） |
+| `to_image_smooth`(+`_with`) / `to_png_smooth`(+`_sized`) / `to_jpg_smooth`(+`_sized`) | — | **SSAA 超采样抗锯齿**：内部按 `size×4` 渲染后双线性缩小，曲线边缘更平滑（小尺寸放大场景消除锯齿） |
 | `to_data_uri`(+`_sized`) | `toDataUri` | `data:image/png;base64,...` |
 | `to_favicon_zip / to_favicon_ico`(+`_sized`) | `toFaviconZip / toFaviconIco` | 多尺寸打包 |
 | `render(input, format, options)` | `Multiavatar.render(...)` | 统一策略入口 |

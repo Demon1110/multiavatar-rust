@@ -163,7 +163,8 @@ pub fn to_image_sized(input: &str, size: u32) -> Option<Pixmap> {
 
 /// 光栅化图像（指定选项）。
 pub fn to_image_with(input: &str, options: &AvatarOptions) -> Option<Pixmap> {
-    avatar_with(input, options).to_image()
+    // 显式传尺寸：缓存键不含 size，命中旧 Avatar 时 options.size() 可能是首次调用的尺寸
+    avatar_with(input, options).to_image_sized(options.size())
 }
 
 /// PNG 字节（默认尺寸 256）；空输入返回空数组。
@@ -180,6 +181,68 @@ pub fn to_png_sized(input: &str, size: u32) -> Vec<u8> {
 /// PNG 字节（指定选项）。
 pub fn to_png_with(input: &str, options: &AvatarOptions) -> Vec<u8> {
     avatar_with(input, options).png_sized(options.size())
+}
+
+// ---------------------------------------------------------------------------
+// 超采样抗锯齿（SSAA）渲染 API —— 边缘更平滑，消除小尺寸放大锯齿
+// ---------------------------------------------------------------------------
+
+/// 光栅化图像（**4x 超采样抗锯齿**）：内部按 `size×4` 分辨率渲染后再
+/// 双线性缩小到 `size`，曲线边缘显著更平滑；透明背景。
+///
+/// 等效 SSAA 4x；对 256px 这类小尺寸输出尤其有效（直接放大观看不再有
+/// 明显锯齿）。空输入返回 None。
+pub fn to_image_smooth(input: &str, size: u32) -> Option<Pixmap> {
+    to_image_smooth_with(input, size, 4)
+}
+
+/// 光栅化图像（**可调超采样因子**）：`factor` 为内部渲染倍率，
+/// `factor = 1` 等价普通渲染；`factor = 4` 是平滑/成本的良好折中。
+pub fn to_image_smooth_with(input: &str, size: u32, factor: u32) -> Option<Pixmap> {
+    if size == 0 || factor <= 1 {
+        return to_image_sized(input, size);
+    }
+    let big = to_image_sized(input, size * factor)?;
+    render::downscale::bilinear(&big, size)
+}
+
+/// PNG 字节（**4x 超采样抗锯齿**，默认边长 256）。
+pub fn to_png_smooth(input: &str) -> Vec<u8> {
+    to_png_smooth_sized(input, AvatarOptions::defaults().size())
+}
+
+/// PNG 字节（4x 超采样抗锯齿，指定边长）。
+pub fn to_png_smooth_sized(input: &str, size: u32) -> Vec<u8> {
+    to_image_smooth(input, size)
+        .map(|p| render::png_writer::to_png(&p))
+        .unwrap_or_default()
+}
+
+/// JPEG 字节（**4x 超采样抗锯齿**，白底，默认边长 256）。
+pub fn to_jpg_smooth(input: &str) -> Vec<u8> {
+    to_jpg_smooth_sized(input, AvatarOptions::defaults().size())
+}
+
+/// JPEG 字节（4x 超采样抗锯齿，白底，指定边长）。
+pub fn to_jpg_smooth_sized(input: &str, size: u32) -> Vec<u8> {
+    let Some(pixmap) = to_image_smooth(input, size) else {
+        return Vec::new();
+    };
+    // 透明背景合成到白底（premultiplied 空间：白底即 alpha 权重）
+    let data = pixmap.data();
+    let mut rgb = Vec::with_capacity((size * size) as usize * 3);
+    for px in data.chunks(4) {
+        let a = px[3];
+        if a == 255 {
+            rgb.extend_from_slice(&px[..3]);
+        } else {
+            // 白底合成：c_out = c_pre + 255*(1-a)；premultiplied 通道 + 白
+            rgb.push(((px[0] as u32 + 255 * (255 - a as u32)).min(255)) as u8);
+            rgb.push(((px[1] as u32 + 255 * (255 - a as u32)).min(255)) as u8);
+            rgb.push(((px[2] as u32 + 255 * (255 - a as u32)).min(255)) as u8);
+        }
+    }
+    render::jpg_writer::to_jpg_rgb(&rgb, size, size)
 }
 
 /// JPEG 字节（默认尺寸 256，白底）；空输入返回空数组。
@@ -354,5 +417,26 @@ mod tests {
         assert!(to_image("").is_none());
         assert!(to_favicon_zip("").is_empty());
         assert!(to_favicon_ico("").is_empty());
+        assert!(to_image_smooth("", 256).is_none());
+        assert!(to_png_smooth("").is_empty());
+        assert!(to_jpg_smooth("").is_empty());
+    }
+
+    /// SSAA：输出尺寸正确、与直接渲染结果不同（平滑化生效）、空输入安全。
+    #[test]
+    fn smooth_ssaa_smaller_and_different() {
+        let input = "smooth-unit-input";
+        let direct = to_image_sized(input, 64).unwrap();
+        let smooth = to_image_smooth(input, 64).unwrap();
+        assert_eq!(smooth.width(), 64);
+        assert_eq!(smooth.height(), 64);
+        // 边缘区域应有过渡差异（直接渲染与超采样后像素不同）
+        assert_ne!(smooth.data(), direct.data(), "SSAA 输出应不同于直接渲染");
+        // factor=1 等价直接渲染
+        let same = to_image_smooth_with(input, 64, 1).unwrap();
+        assert_eq!(same.data(), direct.data());
+        // PNG/JPEG 门面正常编码
+        assert!(!to_png_smooth_sized(input, 64).is_empty());
+        assert!(!to_jpg_smooth_sized(input, 64).is_empty());
     }
 }

@@ -11,6 +11,7 @@ pub mod png_writer;
 pub mod jpg_writer;
 pub mod gif_writer;
 pub mod favicons;
+pub mod downscale;
 
 pub use avatar_format::AvatarFormat;
 pub use avatar_renderer::AvatarRenderer;
