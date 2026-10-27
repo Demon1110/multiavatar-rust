@@ -11,15 +11,18 @@ keywords = ["avatar", "identicon", "svg", "png", "multiavatar"]
 categories = ["multimedia::images", "graphics"]
 
 [dependencies]
-flate2 = "1.1.10"               # gzip 数据资源解压
+flate2 = "1.1.10"               # gzip 数据资源解压 + PNG IDAT zlib 压缩
+crc32fast = "1.5.3"             # PNG chunk / ZIP 条目 CRC32
 roxmltree = "0.21.2"         # SVG XML 只读解析（轻量、无系统依赖）
-tiny-skia = "0.12.0"         # 确定性光栅化（抗锯齿填充/描边，纯 Rust）
-png = "0.18.1"               # PNG 编码
+tiny-skia = { version = "0.12.0", default-features = false, features = ["std", "simd"] }   # 确定性光栅化（AA 填充/描边，纯 Rust；关 png-format，PNG 编码器为手写）
 jpeg-encoder = "0.7.1"       # JPEG 编码（白底）
 gif = "0.14.2"               # GIF 编码（多帧动画）
-zip = { version = "9.1.2", default-features = false, features = ["deflate-flate2"] }   # favicon 打包；仅保留 deflate，去掉 aes/bzip2/lzma/zstd/xz/time 全格式栈
 base64 = "0.23.1"            # PNG data URI
 lru = "0.19.0"               # 全局 LRU 缓存（容量 128）
+
+[dev-dependencies]
+png = "0.18.1"               # 仅测试：独立解码验证手写 PNG 编码器
+zip = { version = "9.1.2", default-features = false, features = ["deflate"] }   # 仅测试：独立解析验证手写 ZIP 打包器
 
 [profile.release]
 lto = true

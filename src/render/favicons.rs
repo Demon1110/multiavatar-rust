@@ -3,8 +3,8 @@
 //! 典型用途：网站 favicon / 应用图标包。viewBox 为正方形时各尺寸均为等比方图，
 //! 非正方形视口会等比缩放并居中（边缘留透明边）。
 //! ICO 格式（Vista+ PNG 内嵌）手写容器：ICONDIR 头 + 每尺寸 ICONDIRENTRY + 原始 PNG 数据。
-
-use std::io::{Cursor, Write};
+//! ZIP 打包同样手写（stored 模式）：favicon PNG 内部已是 deflate 压缩，
+//! ZIP 层再压缩收益极小，stored 即可——零 zip crate 依赖。
 
 use crate::svg::{SvgParser, SvgRasterizer};
 
@@ -14,24 +14,73 @@ use super::png_writer::to_png;
 pub const DEFAULT_SIZES: [u32; 6] = [16, 32, 48, 64, 128, 256];
 
 /// 打包多尺寸 PNG 为 zip 字节（默认尺寸 [DEFAULT_SIZES]）。
+///
+/// ZIP 结构手写：每个条目 Local File Header + 数据（stored），
+/// 末尾 Central Directory + EOCD；文件名 UTF-8（flag 0x0800）。
 pub fn to_zip(svg: &str, sizes: &[u32]) -> Vec<u8> {
     let sizes = if sizes.is_empty() { &DEFAULT_SIZES } else { sizes };
     let doc = SvgParser::parse(svg);
-    let mut buf = Vec::new();
-    {
-        let cursor = Cursor::new(&mut buf);
-        let mut zip = zip::ZipWriter::new(cursor);
-        let options = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated);
-        for size in sizes {
+    // 先渲染全部条目：名字 + PNG 数据
+    let entries: Vec<(String, Vec<u8>)> = sizes
+        .iter()
+        .map(|size| {
             let pixmap = SvgRasterizer::rasterize(&doc, *size).expect("favicon PNG 光栅化失败");
-            let png = to_png(&pixmap);
-            zip.start_file(format!("avatar-{}.png", size), options)
-                .expect("zip 条目创建失败");
-            zip.write_all(&png).expect("zip 写入失败");
-        }
-        zip.finish().expect("zip 收尾失败");
+            (format!("avatar-{}.png", size), to_png(&pixmap))
+        })
+        .collect();
+
+    // 局部头 + 数据（stored）
+    let mut buf = Vec::new();
+    let mut central = Vec::new();
+    for (name, data) in &entries {
+        let offset = buf.len() as u32;
+        // ZIP 条目 CRC32 只针对文件数据（不含文件名）
+        let crc = crc32fast::hash(data);
+        // Local File Header：sig + ver(20) + flags(UTF8) + method(0) + time/date + crc + sizes + name_len + extra_len
+        write_le32(&mut buf, 0x04034b50);
+        write_le16(&mut buf, 20);
+        write_le16(&mut buf, 0x0800);
+        write_le16(&mut buf, 0); // stored
+        write_le16(&mut buf, 0); // mod time（留空，部分解压器容忍；可用 0x0000）
+        write_le16(&mut buf, 0x0021); // mod date 1980-01-01
+        write_le32(&mut buf, crc);
+        write_le32(&mut buf, data.len() as u32);
+        write_le32(&mut buf, data.len() as u32);
+        write_le16(&mut buf, name.len() as u16);
+        write_le16(&mut buf, 0);
+        buf.extend_from_slice(name.as_bytes());
+        buf.extend_from_slice(data);
+        // Central Directory Entry
+        write_le32(&mut central, 0x02014b50);
+        write_le16(&mut central, 20); // version made by
+        write_le16(&mut central, 20); // version needed
+        write_le16(&mut central, 0x0800);
+        write_le16(&mut central, 0);
+        write_le16(&mut central, 0);
+        write_le16(&mut central, 0x0021);
+        write_le32(&mut central, crc);
+        write_le32(&mut central, data.len() as u32);
+        write_le32(&mut central, data.len() as u32);
+        write_le16(&mut central, name.len() as u16);
+        write_le16(&mut central, 0);
+        write_le16(&mut central, 0);
+        write_le16(&mut central, 0);
+        write_le16(&mut central, 0);
+        write_le32(&mut central, 0);
+        write_le32(&mut central, offset);
+        central.extend_from_slice(name.as_bytes());
     }
+    let cd_offset = buf.len() as u32;
+    buf.extend_from_slice(&central);
+    // EOCD
+    write_le32(&mut buf, 0x06054b50);
+    write_le16(&mut buf, 0); // disk
+    write_le16(&mut buf, 0); // cd start disk
+    write_le16(&mut buf, entries.len() as u16);
+    write_le16(&mut buf, entries.len() as u16);
+    write_le32(&mut buf, central.len() as u32);
+    write_le32(&mut buf, cd_offset);
+    write_le16(&mut buf, 0); // comment len
     buf
 }
 

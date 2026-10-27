@@ -182,7 +182,7 @@ cargo clippy        # 静态检查
 cargo build --release   # LTO + codegen-units=1 + strip（体积优化）
 ```
 
-依赖（允许常用 crate，均纯跨平台）：`flate2 roxmltree tiny-skia png jpeg-encoder gif zip base64 lru`。SHA-256 与 SVG 体积优化器均为手写实现（零正则/零哈希依赖）。
+依赖（允许常用 crate，均纯跨平台）：`flate2 crc32fast roxmltree tiny-skia jpeg-encoder gif base64 lru`。SHA-256、SVG 体积优化器、PNG 编码器与 ZIP 打包器均为手写实现（零正则/零哈希/零 png/零 zip crate 依赖；png/zip 仅作为 dev-dependencies 供测试独立解码验证）。
 
 ---
 
