@@ -1,6 +1,6 @@
 [package]
 name = "multiavatar"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2021"
 description = "Deterministic multicultural avatar generator — pure Rust port of multiavatar.js with SVG/PNG/JPEG/GIF/favicon/ICO/data-URI outputs; part library embedded in the binary, no runtime files"
 license = "MIT"
