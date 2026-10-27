@@ -1,7 +1,7 @@
 # Release workflow：
 #   · push 到 main：自动递增 patch 版本 + 出 GitHub Release（含 demo 二进制与 .crate 源码包）；
-#     提交信息含 "[publish]" 关键字时才同步发布 crates.io（Release → Run workflow 是手动替代路径）。
-#   · 手动触发（workflow_dispatch）：可指定 minor / major，并可勾选是否发布 crates.io。
+#     提交信息含 "[publish]" 关键字时同步发布 crates.io 与 npm（Release → Run workflow 是手动替代路径）。
+#   · 手动触发（workflow_dispatch）：可指定 minor / major，并可分别勾选是否发布 crates.io / npm。
 # 版本递增提交带 [skip ci]，避免自身提交再次触发本 workflow。
 
 name: Release
@@ -24,8 +24,12 @@ on:
           - patch
           - minor
           - major
-      publish:
-        description: "是否发布到 crates.io（需仓库配置 CARGO_REGISTRY_TOKEN secret）"
+      publish_crates:
+        description: "发布 crates.io（需 secret CARGO_REGISTRY_TOKEN）"
+        type: boolean
+        default: true
+      publish_npm:
+        description: "发布 npm 包 @w916797724/multiavatar（需 secret NPM_TOKEN）"
         type: boolean
         default: true
 
@@ -53,6 +57,10 @@ jobs:
           else PAT=$((PAT+1)); fi
           NV="$MAJ.$MIN.$PAT"
           sed -i "s/^version = .*/version = \"$NV\"/" Cargo.toml
+          # 同步 npm 包版本（单一来源：Cargo.toml）
+          if [ -f wasm/package.json ]; then
+            sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$NV\"/" wasm/package.json
+          fi
           cargo metadata --no-deps --format-version 1 >/dev/null
           echo "version=$NV" >> "$GITHUB_OUTPUT"
 
@@ -63,6 +71,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.toml
+          git add wasm/package.json 2>/dev/null || true
           # Cargo.lock 被 .gitignore 忽略（库 crate 惯例，不随 checkout 存在）：
           # 存在才 add（cargo metadata 会在本地生成它），不存在则跳过
           git add Cargo.lock 2>/dev/null || true
@@ -71,12 +80,12 @@ jobs:
           git push origin HEAD:main
           git push origin "v${{ steps.next_version.outputs.version }}"
 
-      # ---- 3. 打包校验 + 发布 crates.io ----
+      # ---- 3. 打包校验 + 发布 crates.io / npm ----
       # 发布条件（三者缺一不可）：
-      #   ① secret CARGO_REGISTRY_TOKEN 已配置；
-      #   ② 手动触发（workflow_dispatch）且勾选 publish；
-      #      或 push 触发且最近提交信息含 "[publish]" 关键字；
-      #   ③ cargo package 校验通过（步骤顺序天然保证）。
+      #   ① 对应 secret（CARGO_REGISTRY_TOKEN / NPM_TOKEN）已配置；
+      #   ② 手动触发（workflow_dispatch）且勾选对应开关；
+      #      或 push 触发且最近提交信息含 "[publish]" 关键字（两个仓库同时发）；
+      #   ③ cargo package 校验通过（crates.io 步骤天然保证）。
       - name: Package verify
         run: cargo package --allow-dirty
 
@@ -87,7 +96,22 @@ jobs:
         if: |
           env.CARGO_REGISTRY_TOKEN != '' &&
           (
-            (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true') ||
+            (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_crates == 'true') ||
+            (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish]'))
+          )
+
+      # npm 包：wasm/package.json 版本已由 Bump 步骤同步；publish 前再跑 sync-version 兜底（幂等）
+      - name: Publish npm package
+        working-directory: wasm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm config set //registry.npmjs.org/:_authToken "${NPM_TOKEN}"
+          npm publish --registry https://registry.npmjs.org
+        if: |
+          env.NPM_TOKEN != '' &&
+          (
+            (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_npm == 'true') ||
             (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish]'))
           )
 
