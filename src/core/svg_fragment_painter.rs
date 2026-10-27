@@ -3,13 +3,10 @@
 //! 对应 multiavatar.js 的 getFinal()。为保持与 JS 输出逐字符一致，严格复现其
 //! `resultFinal.replace(result[i], colors[i]+';')` 语义 —— 每次只替换第一个匹配，
 //! 且只替换占位符数量个颜色（多余颜色按 JS 固有行为忽略）。
-
-use regex::Regex;
+//!
+//! 占位符提取为手写线性扫描（复刻 `/#[^;]*;/g`），零第三方依赖。
 
 use crate::data::DataTables;
-
-/// 对应 JS 的 /#(.*?);/g。
-const COLOR_PLACEHOLDER: &str = r"#[^;]*;";
 
 /// 对指定部件的模板着色。
 ///
@@ -25,12 +22,8 @@ pub fn paint(tables: &DataTables, part_name: &str, part_v: &str, theme: &str) ->
         Some(s) => s,
     };
 
-    // 提取所有 #xxx; 占位符（顺序保持）
-    let re = Regex::new(COLOR_PLACEHOLDER).expect("占位符正则编译失败");
-    let placeholders: Vec<String> = re
-        .find_iter(svg)
-        .map(|m| m.as_str().to_string())
-        .collect();
+    // 提取所有 #xxx; 占位符（顺序保持；`#` 后到首个 `;` 之间不含 `;`）
+    let placeholders = find_color_placeholders(svg);
 
     let mut out = svg.to_string();
     for (i, placeholder) in placeholders.iter().enumerate() {
@@ -39,6 +32,24 @@ pub fn paint(tables: &DataTables, part_name: &str, part_v: &str, theme: &str) ->
         out = out.replacen(placeholder, &replacement, 1);
     }
     out
+}
+
+/// 提取全部 `#[^;]*;` 占位符（复刻 JS 正则语义，从左到右、不重叠）。
+fn find_color_placeholders(svg: &str) -> Vec<String> {
+    let mut v = Vec::new();
+    let mut rest = svg;
+    while let Some(pos) = rest.find('#') {
+        let after = &rest[pos + 1..];
+        match after.find(';') {
+            Some(semi) => {
+                // rest[pos..pos+1+semi+1] = `#` + 非 `;` 内容 + `;`
+                v.push(rest[pos..pos + 1 + semi + 1].to_string());
+                rest = &rest[pos + 1 + semi + 1..];
+            }
+            None => break,
+        }
+    }
+    v
 }
 
 #[cfg(test)]

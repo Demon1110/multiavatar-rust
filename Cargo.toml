@@ -11,7 +11,6 @@ keywords = ["avatar", "identicon", "svg", "png", "multiavatar"]
 categories = ["multimedia::images", "graphics"]
 
 [dependencies]
-sha2 = "0.11.1"              # SHA-256（与 multiavatar.js 的 CryptoJS 输出一致）
 flate2 = "1.1.10"               # gzip 数据资源解压
 roxmltree = "0.21.2"         # SVG XML 只读解析（轻量、无系统依赖）
 tiny-skia = "0.12.0"         # 确定性光栅化（抗锯齿填充/描边，纯 Rust）
@@ -20,10 +19,11 @@ jpeg-encoder = "0.7.1"       # JPEG 编码（白底）
 gif = "0.14.2"               # GIF 编码（多帧动画）
 zip = "9.1.2"                  # favicon 多尺寸打包
 base64 = "0.23.1"            # PNG data URI
-regex = "1.13.1"                # SVG 体积优化（占位符/数字 token）
 lru = "0.19.0"               # 全局 LRU 缓存（容量 128）
 
 [profile.release]
 lto = true
 codegen-units = 1
 strip = true
+opt-level = "z"      # 体积优先（头像为一次性生成，性能影响可忽略）
+# panic = "abort"    # 可再减 5-15%，但库发布会影响下游 unwind 语义，默认不开

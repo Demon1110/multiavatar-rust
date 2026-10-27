@@ -5,22 +5,11 @@
 //!   含描边（`stroke:`）的细线条形状到 2 位小数；`transform="..."` 矩阵与
 //!   `points="..."` 多边形坐标统一 1 位；尾零去除、整数不带小数点、负零归一。
 //! - style 尾分号删除：`fill:#333;` → `fill:#333`（CSS 允许无尾分号）。
-
-use regex::Regex;
-
-/// 形状标签：<名 前缀… d="…" 中间… style="…" 后缀…>；替换只动 d 与 style 值，保留全部其他属性。
-/// 前缀组（1）与中间组（3）均含原始分隔空格，拼接时不再补空格。
-const SHAPE_TAG: &str = r#"((?:path|polygon|rect|line)[^>]*?)\bd="([^"]*)"([^>]*?)\bstyle="([^"]*)""#;
-
-/// transform 属性值。
-const TRANSFORM_VALUE: &str = r#"\btransform="([^"]*)""#;
-
-/// points 属性值（多边形坐标）。
-const POINTS_VALUE: &str = r#"\bpoints="([^"]*)""#;
-
-/// 数字 token：整数 / 小数（**要求整数部分**，与官方 JS / Java 正则一致，
-/// 前导小数点形式如 `.99987`、`-.74` 不匹配、原样保留）/ 科学计数法。
-const NUMBER: &str = r"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?";
+//!
+//! 实现为手写线性扫描器（零第三方依赖），逐字符复刻官方 JS/Java 正则语义：
+//! - 形状标签 `((?:path|polygon|rect|line)[^>]*?)\bd="([^"]*)"([^>]*?)\bstyle="([^"]*)"`
+//! - 属性 `\btransform="..."` / `\bpoints="..."`
+//! - 数字 token `-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?`（要求整数部分，前导小数点不匹配）
 
 /// 优化 SVG 文本（近无损）；空串原样返回。
 pub fn optimize(svg: &str) -> String {
@@ -29,39 +18,168 @@ pub fn optimize(svg: &str) -> String {
     }
 
     // 1. 形状标签：d 按是否描边取整（1 位 / 描边 2 位）
-    let re_shape = Regex::new(SHAPE_TAG).expect("shape 正则编译失败");
-    let out1 = re_shape
-        .replace_all(svg, |caps: &regex::Captures| {
-            let d = round_attribute_value(&caps[2], if caps[4].contains("stroke") { 2 } else { 1 });
-            // 与官方 JS / Java 逐字符一致：组 1/3 已含分隔空格，替换模板再补空格
-            // → 输出形如 `<path  d="..."  style="..."/>`（双空格，官方原样）
-            format!("{} d=\"{}\"{} style=\"{}\"", &caps[1], d, &caps[3], &caps[4])
-        })
-        .into_owned();
-
+    let out1 = replace_shapes(svg);
     // 2. transform / points 数值 1 位
-    let re_transform = Regex::new(TRANSFORM_VALUE).expect("transform 正则编译失败");
-    let out2 = re_transform
-        .replace_all(&out1, |caps: &regex::Captures| {
-            format!("transform=\"{}\"", round_attribute_value(&caps[1], 1))
-        })
-        .into_owned();
-
-    let re_points = Regex::new(POINTS_VALUE).expect("points 正则编译失败");
-    let out3 = re_points
-        .replace_all(&out2, |caps: &regex::Captures| {
-            format!("points=\"{}\"", round_attribute_value(&caps[1], 1))
-        })
-        .into_owned();
-
+    let out2 = replace_attribute(&out1, "transform", 1);
+    let out3 = replace_attribute(&out2, "points", 1);
     // 3. style 尾分号删除
     out3.replace(";\"", "\"")
 }
 
+/// 形状标签内 `d=`/`style=` 双属性替换（复刻 SHAPE_TAG 正则）。
+/// 匹配语义：`<` 后 tag 名（path/polygon/rect/line）→ 同一标签内（不跨 `>`）
+/// 依次找 `\bd="..."` 与 `\bstyle="..."`；二者齐备才替换，否则标签原样保留。
+/// 重建模板与官方一致：前缀组已含原始空格，再补空格 → 输出双空格（官方原样）。
+fn replace_shapes(svg: &str) -> String {
+    let mut out = String::with_capacity(svg.len());
+    let mut rest = svg;
+    while let Some(pos) = rest.find('<') {
+        out.push_str(&rest[..pos]);
+        let after_lt = &rest[pos + 1..];
+        if let Some((tag, after_tag)) = shape_tag(after_lt) {
+            if let Some((pre1, d_val, tail1)) = find_attr(after_tag, "d", true) {
+                if let Some((pre2, style_val, tail2)) = find_attr(tail1, "style", true) {
+                    let d_rounded =
+                        round_attribute_value(d_val, if style_val.contains("stroke") { 2 } else { 1 });
+                    out.push('<');
+                    out.push_str(tag);
+                    out.push_str(pre1);
+                    out.push_str(" d=\"");
+                    out.push_str(&d_rounded);
+                    out.push('"');
+                    out.push_str(pre2);
+                    out.push_str(" style=\"");
+                    out.push_str(style_val);
+                    out.push('"');
+                    rest = tail2;
+                    continue;
+                }
+            }
+        }
+        out.push('<');
+        rest = after_lt;
+    }
+    out.push_str(rest);
+    out
+}
+
+/// 在字符串开头识别形状标签名（前缀匹配，与正则交替组一致）。
+fn shape_tag(s: &str) -> Option<(&str, &str)> {
+    for tag in ["polygon", "path", "rect", "line"] {
+        if s.starts_with(tag) {
+            return Some((tag, &s[tag.len()..]));
+        }
+    }
+    None
+}
+
+/// 属性替换：复刻 `\b{attr}="([^"]*)"`，值内数字舍入后重建 `{attr}="..."`。
+/// 词边界语义：属性名首字符前一字符不得为 ASCII 字母/数字/下划线。
+fn replace_attribute(svg: &str, attr: &str, decimals: usize) -> String {
+    let mut out = String::with_capacity(svg.len());
+    let mut rest = svg;
+    loop {
+        // 属性正则 `\b{attr}="..."` 无 [^>] 限制，可跨标签扫描整个文档
+        match find_attr(rest, attr, false) {
+            Some((pre, val, tail)) => {
+                out.push_str(pre);
+                out.push_str(attr);
+                out.push_str("=\"");
+                out.push_str(&round_attribute_value(val, decimals));
+                out.push('"');
+                rest = tail;
+            }
+            None => {
+                out.push_str(rest);
+                break;
+            }
+        }
+    }
+    out
+}
+
+/// 查找 `{attr}="..."` 属性：返回 (到属性名前的原文, 属性值, 值闭合引号后的剩余)。
+/// 语义：属性名前需词边界、属性名后需 `="`；`stop_at_gt = true` 时同一标签内
+/// （遇到 `>` 视为越界失败，对应 shape 正则的 `[^>]*?`），否则跨标签扫描全文。
+fn find_attr<'a>(s: &'a str, attr: &str, stop_at_gt: bool) -> Option<(&'a str, &'a str, &'a str)> {
+    let b = s.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        if stop_at_gt && b[i] == b'>' {
+            return None;
+        }
+        if s[i..].starts_with(attr) && word_boundary_before(s, i) {
+            let after = i + attr.len();
+            if s[after..].starts_with("=\"") {
+                let vstart = after + 2;
+                if let Some(vend_rel) = s[vstart..].find('"') {
+                    let vend = vstart + vend_rel;
+                    return Some((&s[..i], &s[vstart..vend], &s[vend + 1..]));
+                }
+                return None;
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+/// `\b` 语义：位置 i 之前无 ASCII word 字符（字母/数字/下划线）；i=0 视为边界。
+fn word_boundary_before(s: &str, i: usize) -> bool {
+    if i == 0 {
+        return true;
+    }
+    let c = s.as_bytes()[i - 1];
+    !(c.is_ascii_alphanumeric() || c == b'_')
+}
+
+/// 属性值内数字 token 四舍五入（复刻 NUMBER 正则 replace_all）。
+/// token：`-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?` —— 必须整数开头，前导小数点不匹配。
 fn round_attribute_value(value: &str, decimals: usize) -> String {
-    let re = Regex::new(NUMBER).expect("数字正则编译失败");
-    re.replace_all(value, |caps: &regex::Captures| round_token(&caps[0], decimals))
-        .into_owned()
+    let b = value.as_bytes();
+    let mut out = String::with_capacity(value.len());
+    let mut i = 0;
+    while i < b.len() {
+        let neg = b[i] == b'-' && i + 1 < b.len() && b[i + 1].is_ascii_digit();
+        if b[i].is_ascii_digit() || neg {
+            let start = i;
+            let mut j = i;
+            if neg {
+                j += 1;
+            }
+            // \d+
+            while j < b.len() && b[j].is_ascii_digit() {
+                j += 1;
+            }
+            // (?:\.\d+)?
+            if j + 1 < b.len() && b[j] == b'.' && b[j + 1].is_ascii_digit() {
+                j += 1;
+                while j < b.len() && b[j].is_ascii_digit() {
+                    j += 1;
+                }
+            }
+            // (?:[eE][+-]?\d+)?
+            if j < b.len() && (b[j] == b'e' || b[j] == b'E') {
+                let mut k = j + 1;
+                if k < b.len() && (b[k] == b'+' || b[k] == b'-') {
+                    k += 1;
+                }
+                if k < b.len() && b[k].is_ascii_digit() {
+                    j = k;
+                    while j < b.len() && b[j].is_ascii_digit() {
+                        j += 1;
+                    }
+                }
+            }
+            out.push_str(&round_token(&value[start..j], decimals));
+            i = j;
+        } else {
+            let ch = value[i..].chars().next().unwrap();
+            out.push(ch);
+            i += ch.len_utf8();
+        }
+    }
+    out
 }
 
 /// 数字 token 四舍五入到指定小数位；整数/负零归一。
