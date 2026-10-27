@@ -1,7 +1,9 @@
-# Release workflow：
-#   · push 到 main：自动递增 patch 版本 + 出 GitHub Release（含 demo 二进制与 .crate 源码包）；
-#     提交信息含 "[publish]" 关键字时同步发布 crates.io 与 npm（Release → Run workflow 是手动替代路径）。
+# Release workflow（仅 [publish] 关键字或手动触发才执行）：
+#   · push 到 main：普通提交不执行任何 release 动作（不 bump、不打 tag、不出 Release）；
+#     提交信息含 "[publish]" 关键字时：bump 版本 + 打 tag + GitHub Release + 发布 crates.io + npm stage publish。
 #   · 手动触发（workflow_dispatch）：可指定 minor / major，并可分别勾选是否发布 crates.io / npm。
+#   · npm 采用 stage 模式：CI 只把版本推入 npm 暂存区（npm stage publish），
+#     正式发布需 maintainer（启用 2FA）在 npmjs.com 包页面或命令行 npm stage promote 确认。
 # 版本递增提交带 [skip ci]，避免自身提交再次触发本 workflow。
 
 name: Release
@@ -17,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       version_bump:
-        description: "版本递增类型（push 自动触发时固定为 patch）"
+        description: "版本递增类型（手动触发时选择；push [publish] 触发时固定为 patch）"
         type: choice
         default: patch
         options:
@@ -29,7 +31,7 @@ on:
         type: boolean
         default: true
       publish_npm:
-        description: "发布 npm 包 @w916797724/multiavatar（需 secret NPM_TOKEN）"
+        description: "npm stage publish（暂存；需 secret NPM_TOKEN，正式发布还需手动 promote）"
         type: boolean
         default: true
 
@@ -39,6 +41,10 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-24.04
+    # 门控：只有手动触发，或 push 的最近提交含 "[publish]" 才进入 release 流程
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish]'))
     steps:
       - uses: actions/checkout@v5
         with:
@@ -100,15 +106,18 @@ jobs:
             (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish]'))
           )
 
-      # npm 包：wasm/package.json 版本已由 Bump 步骤同步；
-      # --ignore-scripts 跳过 prepublishOnly（CI 为 Linux sh，不依赖 node 脚本；本地手动发布时 hook 仍会跑 node 同步）
-      - name: Publish npm package
+      # npm 包（stage 模式）：wasm/package.json 版本已由 Bump 步骤同步；
+      # --ignore-scripts 跳过 prepublishOnly（版本已同步；CI 无需再跑 node 脚本）。
+      # stage 发布后需 maintainer（2FA）promote 才正式可见：
+      #   网页：https://www.npmjs.com/package/@w916797724/multiavatar → Staged releases → Approve
+      #   命令行：npm stage promote --package @w916797724/multiavatar --version <版本>
+      - name: Stage npm package
         working-directory: wasm
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           npm config set //registry.npmjs.org/:_authToken "${NPM_TOKEN}"
-          npm publish --registry https://registry.npmjs.org --ignore-scripts
+          npm stage publish --registry https://registry.npmjs.org --ignore-scripts
         if: |
           env.NPM_TOKEN != '' &&
           (
