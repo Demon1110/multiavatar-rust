@@ -36,3 +36,8 @@ codegen-units = 1
 strip = true
 opt-level = "z"      # 体积优先（头像为一次性生成，性能影响可忽略）
 # panic = "abort"  # 实测：demo 750.5→678KB（-9.7%）；对库是 breaking（下游 unwind 语义），启用与否待定
+
+# workspace：核心库（根）+ egui 桌面/移动端应用
+[workspace]
+members = ["egui"]
+resolver = "2"

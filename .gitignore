@@ -1,5 +1,6 @@
 # Rust 构建产物
 /target
+/egui/target
 
 # 演示运行产物（cargo run --example demo 生成：10 组头像 + favicon + 预览图）
 /demo/
