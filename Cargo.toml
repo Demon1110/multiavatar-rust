@@ -11,22 +11,21 @@ keywords = ["avatar", "identicon", "svg", "png", "multiavatar"]
 categories = ["multimedia::images", "graphics"]
 
 [dependencies]
-flate2 = "1.1.10"               # gzip 数据资源解压 + PNG IDAT zlib 压缩
+flate2 = "1.1.10"               # gzip 数据资源解压 + PNG IDAT zlib 压缩（默认 rust_backend=miniz_oxide 最省）
 crc32fast = "1.5.3"             # PNG chunk / ZIP 条目 CRC32
 roxmltree = "0.21.2"         # SVG XML 只读解析（轻量、无系统依赖）
-tiny-skia = { version = "0.12.0", default-features = false, features = ["std", "simd"] }   # 确定性光栅化（AA 填充/描边，纯 Rust；关 png-format，PNG 编码器为手写）
+tiny-skia = { version = "0.12.0", default-features = false, features = ["std", "simd"] }   # 确定性光栅化（AA 填充/描边，纯 Rust；关 png-format；simd 实测必开，关反而 +70KB）
 jpeg-encoder = "0.7.1"       # JPEG 编码（白底）
 gif = "0.14.2"               # GIF 编码（多帧动画）
-base64 = "0.23.1"            # PNG data URI
-lru = "0.19.0"               # 全局 LRU 缓存（容量 128）
 
 [dev-dependencies]
 png = "0.18.1"               # 仅测试：独立解码验证手写 PNG 编码器
-zip = { version = "9.1.2", default-features = false, features = ["deflate"] }   # 仅测试：独立解析验证手写 ZIP 打包器
+zip = { version = "9.1.2", default-features = false, features = ["deflate-flate2"] }   # 仅测试：独立解析验证手写 ZIP；flate2 后端跟随默认（miniz_oxide），避免 deflate 特性强拉 zlib-rs
+base64 = "0.23.1"            # 仅测试：独立解码验证手写 base64 编码器
 
 [profile.release]
 lto = true
 codegen-units = 1
 strip = true
 opt-level = "z"      # 体积优先（头像为一次性生成，性能影响可忽略）
-# panic = "abort"    # 可再减 5-15%，但库发布会影响下游 unwind 语义，默认不开
+# panic = "abort"  # 实测：demo 750.5→678KB（-9.7%）；对库是 breaking（下游 unwind 语义），启用与否待定

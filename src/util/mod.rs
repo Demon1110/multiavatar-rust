@@ -1,5 +1,6 @@
 //! 工具函数。
 
+pub mod base64;
 pub mod strings;
 
 /// 计算 SHA-256，输出小写十六进制（与 JS CryptoJS SHA256 的 toString() 一致）。

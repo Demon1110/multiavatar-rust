@@ -6,7 +6,6 @@
 
 use std::sync::{Arc, OnceLock};
 
-use base64::Engine as _;
 use tiny_skia::Pixmap;
 
 use crate::render::{AvatarFormat, Renderers, png_writer::to_png};
@@ -117,7 +116,7 @@ impl Avatar {
         }
         format!(
             "data:image/png;base64,{}",
-            base64::engine::general_purpose::STANDARD.encode(png)
+            crate::util::base64::encode(&png)
         )
     }
 }
