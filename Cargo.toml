@@ -17,7 +17,7 @@ tiny-skia = "0.12.0"         # 确定性光栅化（抗锯齿填充/描边，纯
 png = "0.18.1"               # PNG 编码
 jpeg-encoder = "0.7.1"       # JPEG 编码（白底）
 gif = "0.14.2"               # GIF 编码（多帧动画）
-zip = "9.1.2"                  # favicon 多尺寸打包
+zip = { version = "9.1.2", default-features = false, features = ["deflate-flate2"] }   # favicon 打包；仅保留 deflate，去掉 aes/bzip2/lzma/zstd/xz/time 全格式栈
 base64 = "0.23.1"            # PNG data URI
 lru = "0.19.0"               # 全局 LRU 缓存（容量 128）
 
