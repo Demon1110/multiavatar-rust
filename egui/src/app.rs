@@ -226,13 +226,9 @@ impl StudioApp {
         ui.add_space(8.0);
     }
 
-    // ---- 左栏：输入 / 尺寸 / 格式 / 导出 / 历史 ----
+    // ---- 左栏：输入 / 尺寸 / 格式 / 导出 / 历史（面板在 ui() 统一构建） ----
     fn left_panel(&mut self, ui: &mut egui::Ui) {
-        egui::Panel::left("left")
-            .default_size(310.0)
-            .resizable(true)
-            .show(ui, |ui| {
-                egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                     // 输入
                     theme::card(&self.palette).show(ui, |ui| {
                         ui.label(RichText::new("✏️ 输入文字").strong().color(self.palette.accent));
@@ -341,7 +337,6 @@ impl StudioApp {
                     });
                     ui.add_space(10.0);
                 });
-            });
     }
 
     fn export_current(&mut self, kind: ExportKind) {
@@ -523,17 +518,9 @@ impl StudioApp {
         }
     }
 
-    // ---- 底部：批量生成 ----
+    // ---- 底部：批量生成（面板在 ui() 统一构建，这里只放内容） ----
     fn bottom_panel(&mut self, ui: &mut egui::Ui) {
-        egui::Panel::bottom("bottom")
-            .resizable(true)
-            .default_size(220.0) // 给批量区更多垂直空间（面板顶边相应上移）
-            // 面板自身不填充、无描边、无分隔线：批量区顶部不再有任何横线
-            // （只保留内部卡片自己的描边线）
-            .frame(egui::Frame::NONE)
-            .show_separator_line(false)
-            .show(ui, |ui| {
-                ui.add_space(6.0);
+        ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     theme::gradient_heading(ui, "批量生成", &self.palette);
                     ui.label(
@@ -607,7 +594,6 @@ impl StudioApp {
                         });
                     });
                 ui.add_space(6.0);
-            });
     }
 
     fn generate_grid(&mut self, ctx: &egui::Context) {
@@ -768,19 +754,23 @@ impl eframe::App for StudioApp {
         theme::paint_background(&ctx, &self.palette, ctx.input(|i| i.time));
 
         self.ensure_preview(&ctx);
-        egui::Panel::top("top").show(ui, |ui| self.top_bar(ui));
+        // 面板统一在此构建：显式用主题色填充（不依赖 root Ui 的 Light/Dark 样式，
+        // 避免首帧浅色面板 + 白字 title 看不见），并去掉方法内的嵌套面板（ID 冲突）
+        let panel_frame = egui::Frame::new().fill(self.palette.panel);
+        egui::Panel::top("top")
+            .frame(panel_frame.clone())
+            .show(ui, |ui| self.top_bar(ui));
         egui::Panel::left("left")
             .default_size(310.0)
             .resizable(true)
-            .show(ui, |ui| {
-                self.left_panel(ui);
-            });
+            .frame(panel_frame.clone())
+            .show(ui, |ui| self.left_panel(ui));
         egui::Panel::bottom("bottom")
             .resizable(true)
-            .default_size(220.0)
-            .show(ui, |ui| {
-                self.bottom_panel(ui);
-            });
+            .exact_size(420.0) // 强制批量区 420px（真实生效，不再被外层 220 面板嵌套覆盖）
+            .frame(panel_frame)
+            .show_separator_line(false)
+            .show(ui, |ui| self.bottom_panel(ui));
         // 注意：CentralPanel 必须最后 show——0.37 的 Panel 从 available_rect 即取即切，
         // 若提前占用，会吃掉 bottom/left 面板的空间（批量区消失）
         egui::CentralPanel::default().show(ui, |ui| {
