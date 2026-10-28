@@ -273,7 +273,26 @@ impl StudioApp {
                         ui.label(RichText::new("📐 尺寸").strong().color(self.palette.accent));
                         ui.horizontal(|ui| {
                             ui.label("尺寸");
-                            ui.add(egui::Slider::new(&mut self.size, 64..=1024).logarithmic(true).suffix(" px"));
+                            // 局部覆盖 visuals：slider 手柄/轨道用亮色，避免深色主题下看不到滑块
+                            ui.scope(|ui| {
+                                let mut v = ui.visuals().clone();
+                                v.widgets.inactive.bg_fill = self.palette.accent.gamma_multiply(0.85);
+                                v.widgets.inactive.fg_stroke =
+                                    egui::Stroke::new(1.5_f32, self.palette.accent);
+                                v.widgets.hovered.bg_fill = self.palette.accent2;
+                                v.widgets.hovered.fg_stroke =
+                                    egui::Stroke::new(1.5_f32, self.palette.accent2);
+                                v.widgets.active.bg_fill = self.palette.accent2;
+                                v.widgets.active.fg_stroke =
+                                    egui::Stroke::new(2.0_f32, self.palette.accent2);
+                                ui.set_visuals(v);
+                                ui.add(
+                                    egui::Slider::new(&mut self.size, 64..=1024)
+                                        .logarithmic(true)
+                                        .trailing_fill(true)
+                                        .suffix(" px"),
+                                );
+                            });
                         });
                         ui.label(
                             RichText::new(format!("输出约 {size}×{size} px", size = self.size))
@@ -286,19 +305,21 @@ impl StudioApp {
                     // 格式
                     theme::card(&self.palette).show(ui, |ui| {
                         ui.label(RichText::new("🖼️ 预览格式").strong().color(self.palette.accent));
-                        egui::ComboBox::from_id_salt("fmt")
-                            .selected_text(self.format.label())
-                            .show_ui(ui, |ui| {
-                                for f in PreviewFormat::ALL {
-                                    ui.selectable_value(&mut self.format, f, f.label());
-                                }
-                            });
-                        if ui.button("❓ 格式说明").clicked() {
-                            self.set_status(
-                                false,
-                                "SVG 矢量可无限缩放；PNG 无损；JPEG 体积小（白底）；GIF 多帧动画；ICO/favicon.zip 用于网站图标",
-                            );
-                        }
+                        ui.horizontal(|ui| {
+                            egui::ComboBox::from_id_salt("fmt")
+                                .selected_text(self.format.label())
+                                .show_ui(ui, |ui| {
+                                    for f in PreviewFormat::ALL {
+                                        ui.selectable_value(&mut self.format, f, f.label());
+                                    }
+                                });
+                            if ui.button("❓ 格式说明").clicked() {
+                                self.set_status(
+                                    false,
+                                    "SVG 矢量可无限缩放；PNG 无损；JPEG 体积小（白底）；GIF 多帧动画；ICO/favicon.zip 用于网站图标",
+                                );
+                            }
+                        });
                     });
 
                     ui.add_space(6.0);
@@ -521,79 +542,79 @@ impl StudioApp {
     // ---- 底部：批量生成（面板在 ui() 统一构建，这里只放内容） ----
     fn bottom_panel(&mut self, ui: &mut egui::Ui) {
         ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            theme::gradient_heading(ui, "批量生成", &self.palette);
+            ui.label(
+                RichText::new("每行一个名字，统一风格头像")
+                    .size(12.0)
+                    .color(self.palette.text_dim),
+            );
+        });
+        ui.add_space(6.0);
+        egui::Frame::new()
+            .fill(self.palette.panel)
+            .stroke(egui::Stroke::new(1.0_f32, self.palette.stroke))
+            .corner_radius(egui::CornerRadius::same(12))
+            .inner_margin(egui::Margin::same(10))
+            .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    theme::gradient_heading(ui, "批量生成", &self.palette);
-                    ui.label(
-                        RichText::new("每行一个名字，统一风格头像")
-                            .size(12.0)
-                            .color(self.palette.text_dim),
-                    );
-                });
-                ui.add_space(6.0);
-                egui::Frame::new()
-                    .fill(self.palette.panel)
-                    .stroke(egui::Stroke::new(1.0_f32, self.palette.stroke))
-                    .corner_radius(egui::CornerRadius::same(12))
-                    .inner_margin(egui::Margin::same(10))
-                    .show(ui, |ui| {
+                    ui.vertical(|ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(&mut self.batch_text)
+                                .desired_rows(6)
+                                .desired_width(260.0)
+                                .hint_text("每行一个名字"),
+                        );
                         ui.horizontal(|ui| {
-                            ui.vertical(|ui| {
-                                ui.add(
-                                    egui::TextEdit::multiline(&mut self.batch_text)
-                                        .desired_rows(6)
-                                        .desired_width(260.0)
-                                        .hint_text("每行一个名字"),
-                                );
-                                ui.horizontal(|ui| {
-                                    if ui.button("🖼️ 生成网格").clicked() {
-                                        self.generate_grid(ui.ctx());
-                                    }
-                                    if !self.grid.is_empty()
-                                        && ui.button("📁 批量导出 (PNG)").clicked()
-                                    {
-                                        self.export_grid();
-                                    }
-                                });
-                            });
-                            ui.add_space(12.0);
-                            // 网格
-                            if self.grid.is_empty() {
-                                ui.vertical_centered(|ui| {
-                                    ui.add_space(30.0);
-                                    ui.label(
-                                        RichText::new("点击「生成网格」预览全部头像")
-                                            .color(self.palette.text_dim),
-                                    );
-                                });
-                            } else {
-                                egui::ScrollArea::horizontal().show(ui, |ui| {
-                                    ui.horizontal_wrapped(|ui| {
-                                        for (name, tex) in &self.grid {
-                                            ui.vertical(|ui| {
-                                                // fit_to_exact_size 统一每格尺寸，避免各列宽窄不一导致错位
-                                                ui.add(
-                                                    egui::Image::new(tex)
-                                                        .fit_to_exact_size(egui::vec2(
-                                                            self.grid_size as f32,
-                                                            self.grid_size as f32,
-                                                        ))
-                                                        .corner_radius(egui::CornerRadius::same(
-                                                            10,
-                                                        )),
-                                                );
-                                                ui.label(
-                                                    RichText::new(name.as_str())
-                                                        .size(11.0)
-                                                        .color(self.palette.text_dim),
-                                                );
-                                            });
-                                        }
-                                    });
-                                });
+                            if ui.button("🖼️ 生成网格").clicked() {
+                                self.generate_grid(ui.ctx());
+                            }
+                            if !self.grid.is_empty() && ui.button("📁 批量导出 (PNG)").clicked()
+                            {
+                                self.export_grid();
                             }
                         });
                     });
-                ui.add_space(6.0);
+                    ui.add_space(12.0);
+                    // 网格
+                    if self.grid.is_empty() {
+                        ui.vertical_centered(|ui| {
+                            ui.add_space(30.0);
+                            ui.label(
+                                RichText::new("点击「生成网格」预览全部头像")
+                                    .color(self.palette.text_dim),
+                            );
+                        });
+                    } else {
+                        // 高度收缩到内容、内容顶部对齐：滚动条贴底，图片始终靠上展示
+                        egui::ScrollArea::horizontal()
+                            .auto_shrink([false, true])
+                            .show(ui, |ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    for (name, tex) in &self.grid {
+                                        ui.vertical(|ui| {
+                                            // fit_to_exact_size 统一每格尺寸，避免各列宽窄不一导致错位
+                                            ui.add(
+                                                egui::Image::new(tex)
+                                                    .fit_to_exact_size(egui::vec2(
+                                                        self.grid_size as f32,
+                                                        self.grid_size as f32,
+                                                    ))
+                                                    .corner_radius(egui::CornerRadius::same(10)),
+                                            );
+                                            ui.label(
+                                                RichText::new(name.as_str())
+                                                    .size(11.0)
+                                                    .color(self.palette.text_dim),
+                                            );
+                                        });
+                                    }
+                                });
+                            });
+                    }
+                });
+            });
+        ui.add_space(6.0);
     }
 
     fn generate_grid(&mut self, ctx: &egui::Context) {
@@ -767,7 +788,7 @@ impl eframe::App for StudioApp {
             .show(ui, |ui| self.left_panel(ui));
         egui::Panel::bottom("bottom")
             .resizable(true)
-            .exact_size(420.0) // 强制批量区 420px（真实生效，不再被外层 220 面板嵌套覆盖）
+            .exact_size(290.0) // 强制批量区 420px（真实生效，不再被外层 220 面板嵌套覆盖）
             .frame(panel_frame)
             .show_separator_line(false)
             .show(ui, |ui| self.bottom_panel(ui));
