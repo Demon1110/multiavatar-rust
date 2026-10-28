@@ -698,11 +698,13 @@ impl eframe::App for StudioApp {
         egui::Panel::left("left").default_size(310.0).resizable(true).show(ui, |ui| {
             self.left_panel(ui);
         });
-        egui::CentralPanel::default().show(ui, |ui| {
-            self.center(ui);
-        });
         egui::Panel::bottom("bottom").resizable(true).default_size(220.0).show(ui, |ui| {
             self.bottom_panel(ui);
+        });
+        // 注意：CentralPanel 必须最后 show——0.37 的 Panel 从 available_rect 即取即切，
+        // 若提前占用，会吃掉 bottom/left 面板的空间（批量区消失）
+        egui::CentralPanel::default().show(ui, |ui| {
+            self.center(ui);
         });
     }
 }
