@@ -17,7 +17,7 @@ eframe = { version = "0.37.0", default-features = false, features = [
     "wayland",
     "x11",
 ] }
-image = "0.25.10"           # 预览解码：PNG/JPEG/GIF（位图 + GIF 帧动画）
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif"] }   # 预览解码：只用 PNG/JPEG/GIF，裁掉其余 12 种格式解码器
 
 # 原生文件保存对话框（桌面三平台；Android 无后端，走内部存储导出）
 [target.'cfg(not(target_os = "android"))'.dependencies]
