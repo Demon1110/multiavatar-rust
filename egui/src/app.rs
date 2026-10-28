@@ -75,6 +75,9 @@ pub struct StudioApp {
     status: String,
     status_ok: bool,
 
+    // 首帧主题重放标记（egui 0.37 样式初始化时序下，new() 里 apply 可能被首帧覆盖）
+    theme_applied: bool,
+
     rng_state: u64,
 }
 
@@ -102,6 +105,7 @@ impl StudioApp {
             grid_size: 96,
             status: "就绪".into(),
             status_ok: true,
+            theme_applied: false,
             rng_state: 0x9E3779B97F4A7C15,
         }
     }
@@ -524,6 +528,7 @@ impl StudioApp {
         egui::Panel::bottom("bottom")
             .resizable(true)
             .default_size(220.0)
+            .show_separator_line(false) // 去掉面板自带分隔线，只保留卡片描边（避免顶部两条线）
             .show(ui, |ui| {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
@@ -575,9 +580,10 @@ impl StudioApp {
                                     ui.horizontal_wrapped(|ui| {
                                         for (name, tex) in &self.grid {
                                             ui.vertical(|ui| {
+                                                // fit_to_exact_size 统一每格尺寸，避免各列宽窄不一导致错位
                                                 ui.add(
                                                     egui::Image::new(tex)
-                                                        .max_size(egui::vec2(
+                                                        .fit_to_exact_size(egui::vec2(
                                                             self.grid_size as f32,
                                                             self.grid_size as f32,
                                                         ))
@@ -750,6 +756,11 @@ impl eframe::App for StudioApp {
     // eframe 0.37：App::ui 接收根 Ui（无 margin/背景），面板通过 ui 嵌套
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        // 首帧重放主题：确保刚打开即生效（0.37 下 new() 里的 apply 可能被初始化覆盖）
+        if !self.theme_applied {
+            theme::apply(&ctx, self.theme);
+            self.theme_applied = true;
+        }
         // 全屏渐变背景（最底层，面板半透明透出）
         theme::paint_background(&ctx, &self.palette, ctx.input(|i| i.time));
 
