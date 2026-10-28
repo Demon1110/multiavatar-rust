@@ -43,7 +43,7 @@
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-布局策略：`TopBottomPanel(top)` 顶栏 → `SidePanel(left)` 控制面板 → `CentralPanel` 预览 → `TopBottomPanel(bottom)` 批量区。左侧纵向滚动，中央自适应大图，底部批量区可拖拽调高。
+布局策略：`Panel::top` 顶栏 → `Panel::left` 控制面板 → `CentralPanel` 预览 → `Panel::bottom` 批量区（egui 0.37 面板统一为 `egui::Panel`）。左侧纵向滚动，中央自适应大图，底部批量区可拖拽调高。
 
 ## 快速开始
 
@@ -94,7 +94,7 @@ Android 端导出走外部存储（无文件对话框），其余功能与桌面
 
 ## 技术栈
 
-- **egui 0.32 / eframe 0.32**：即时模式 GUI，跨平台渲染（wgpu/glow）
+- **egui 0.37 / eframe 0.37**：即时模式 GUI，跨平台渲染（glow / OpenGL 后端，绕开 wgpu 依赖树，体积更小）
 - **multiavatar**：核心生成库（path 依赖，SVG/PNG/JPEG/GIF/ICO/favicon/data-URI）
 - **image 0.25**：预览解码（PNG/JPEG/GIF 帧动画）
 - **rfd 0.15**：桌面原生保存对话框（Android 下按 cfg 剔除）
