@@ -1,0 +1,173 @@
+# multiavatar Studio 跨平台打包（egui 分支）
+# 一次构建四个平台产物：
+#   · Windows  : multiavatar-studio-<ver>-windows-x86_64.exe（UPX --best --lzma 加壳）
+#   · Linux    : multiavatar-studio-<ver>-linux-x86_64.tar.gz (+sha256)
+#   · macOS    : multiavatar-studio-<ver>-macos-universal.dmg（aarch64+x86_64 universal）
+#   · Android  : multiavatar-studio-<ver>-android-jniLibs.zip（arm64-v8a/armeabi-v7a/x86_64 的 .so）
+# 触发方式：
+#   · 手动触发（workflow_dispatch）：只上传 Actions Artifacts
+#   · 推送 tag v*（如 git tag v0.2.0 && git push origin v0.2.0）：
+#     自动创建 GitHub Release 并附上四个平台全部产物
+# 产物统一从 scripts/ 打包脚本与 target/dist 汇总，版本号自动取自 egui/Cargo.toml。
+
+name: Build Studio (Win/Linux/macOS/Android)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  # ---------------- 桌面三平台（矩阵） ----------------
+  build-desktop:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: Linux
+            os: ubuntu-latest
+          - name: macOS
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: studio-${{ matrix.os }}-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('**/*.rs') }}
+
+      - name: Build release
+        run: cargo build --release -p multiavatar-studio
+
+      # ---------------- Windows：UPX 加壳 + 收集产物 ----------------
+      - name: Pack Windows (UPX)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path egui/Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"').Matches.Groups[1].Value
+          $exe = "target\release\multiavatar-studio.exe"
+          # 下载 UPX（固定版本，避免 choco/winget 在 runner 上的不确定性）
+          $u = "https://github.com/upx/upx/releases/download/v5.2.1/upx-5.2.1-win64.zip"
+          Invoke-WebRequest -Uri $u -OutFile upx.zip
+          Expand-Archive -LiteralPath upx.zip -DestinationPath .
+          & "upx-5.2.1-win64\upx.exe" --best --lzma $exe
+          New-Item -ItemType Directory -Force target\dist | Out-Null
+          Copy-Item $exe "target\dist\multiavatar-studio-$ver-windows-x86_64.exe"
+          (Get-FileHash $exe -Algorithm SHA256).Hash + "  multiavatar-studio-$ver-windows-x86_64.exe" |
+            Set-Content "target\dist\multiavatar-studio-$ver-windows-x86_64.exe.sha256" -Encoding ascii
+
+      # ---------------- Linux：调用 scripts/build-linux.sh ----------------
+      - name: Pack Linux
+        if: runner.os == 'Linux'
+        run: |
+          bash scripts/build-linux.sh
+          ls -lh target/dist
+
+      # ---------------- macOS：调用 scripts/build-macos.sh ----------------
+      - name: Pack macOS
+        if: runner.os == 'macOS'
+        run: |
+          bash scripts/build-macos.sh
+          # 补 sha256
+          cd target/dist
+          for f in *.dmg; do shasum -a 256 "$f" > "$f.sha256"; done
+          ls -lh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-${{ matrix.name }}
+          path: target/dist/*
+          if-no-files-found: error
+
+  # ---------------- Android：cargo-ndk 三 ABI 编译 .so ----------------
+  build-android:
+    name: Android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust + Android targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android
+
+      - name: Setup Android NDK (r25)
+        uses: android-actions/setup-android@v3
+        with:
+          ndk-version: 25.2.9519653
+
+      - name: Install cargo-ndk
+        run: |
+          wget -q https://github.com/bbqsrc/cargo-ndk/releases/download/v3.5.4/cargo-ndk-x86_64-unknown-linux-gnu.zip
+          unzip -o cargo-ndk-x86_64-unknown-linux-gnu.zip -d "$HOME/.cargo/bin"
+          cargo-ndk --version
+
+      - name: Build .so (three ABIs)
+        env:
+          ANDROID_NDK_HOME: ${{ runner.os == 'Linux' && env.ANDROID_NDK_HOME }}
+        run: |
+          echo "NDK=$ANDROID_NDK_HOME"
+          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 \
+            -o target/jniLibs \
+            build --release -p multiavatar-studio
+          find target/jniLibs -name '*.so' -exec ls -lh {} \;
+
+      - name: Pack Android zip
+        run: |
+          ver=$(grep -m1 '^version' egui/Cargo.toml | cut -d '"' -f2)
+          mkdir -p target/dist
+          cd target/jniLibs
+          zip -r "../dist/multiavatar-studio-$ver-android-jniLibs.zip" .
+          cd ../dist
+          sha256sum "multiavatar-studio-$ver-android-jniLibs.zip" > "multiavatar-studio-$ver-android-jniLibs.zip.sha256"
+          ls -lh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-Android
+          path: target/dist/*
+          if-no-files-found: error
+
+  # ---------------- 汇总：tag 触发时创建 GitHub Release ----------------
+  release:
+    name: Create GitHub Release
+    needs: [build-desktop, build-android]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List files
+        run: ls -lhR dist
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "$TAG" \
+            --generate-notes \
+            dist/*
