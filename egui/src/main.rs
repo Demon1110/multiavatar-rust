@@ -17,13 +17,21 @@ use eframe::egui;
 
 #[cfg(not(target_os = "android"))]
 fn main() -> eframe::Result {
-    let options = eframe::NativeOptions {
+    let mut options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("multiavatar Studio")
             .with_inner_size([1280.0, 840.0])
             .with_min_inner_size([960.0, 640.0]),
         ..Default::default()
     };
+    // 窗口/任务栏图标：用库生成 32×32 头像（RGBA）
+    if let Some(px) = multiavatar::to_image_sized("multiavatar", 32) {
+        options.viewport = options.viewport.with_icon(egui::IconData {
+            rgba: px.data().to_vec(),
+            width: 32,
+            height: 32,
+        });
+    }
     eframe::run_native(
         "multiavatar Studio",
         options,
@@ -35,11 +43,18 @@ fn main() -> eframe::Result {
 #[cfg(target_os = "android")]
 #[no_mangle]
 fn android_main(_app: egui::android::AndroidApp) {
-    let options = eframe::NativeOptions {
+    let mut options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("multiavatar Studio"),
         ..Default::default()
     };
+    if let Some(px) = multiavatar::to_image_sized("multiavatar", 32) {
+        options.viewport = options.viewport.with_icon(egui::IconData {
+            rgba: px.data().to_vec(),
+            width: 32,
+            height: 32,
+        });
+    }
     let _ = eframe::run_native(
         "multiavatar Studio",
         options,

@@ -35,7 +35,10 @@ lto = true
 codegen-units = 1
 strip = true
 opt-level = "z"      # 体积优先（头像为一次性生成，性能影响可忽略）
-# panic = "abort"  # 实测：demo 750.5→678KB（-9.7%）；对库是 breaking（下游 unwind 语义），启用与否待定
+# 实测 -9.7%；panic 无法 per-package 设置，只能全局。
+# 注意：panic 是"构建选项"，不写入 crate 元数据——
+# 发布到 crates.io 的库不受影响，下游消费者用他们自己的 profile 决定 panic 策略
+panic = "abort"
 
 # workspace：核心库（根）+ egui 桌面/移动端应用
 [workspace]
