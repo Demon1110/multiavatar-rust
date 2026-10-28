@@ -182,12 +182,30 @@ pub fn glow_button(ui: &mut egui::Ui, text: &str, pal: &Palette) -> egui::Respon
     ui.add(btn)
 }
 
-/// 渐变文字标题（用两种颜色拼接实现色彩渐变感）。
+/// 渐变文字标题：逐字符在两端色之间 gamma 插值（LayoutJob 单段渲染），
+/// 避免旧实现按字节硬切导致的单词/字母割裂感。
 pub fn gradient_heading(ui: &mut egui::Ui, text: &str, pal: &Palette) {
-    let half = text.len() / 2;
-    let (a, b) = text.split_at(half);
-    ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(a).size(24.0).strong().color(pal.accent));
-        ui.label(egui::RichText::new(b).size(24.0).strong().color(pal.accent2));
-    });
+    use egui::text::{LayoutJob, TextFormat};
+
+    let chars: Vec<char> = text.chars().collect();
+    let n = chars.len();
+    if n == 0 {
+        return;
+    }
+    let font_id = egui::FontId::proportional(24.0);
+    let mut job = LayoutJob::default();
+    for (i, &ch) in chars.iter().enumerate() {
+        let t = if n > 1 { i as f32 / (n - 1) as f32 } else { 0.0 };
+        let color = pal.accent.lerp_to_gamma(pal.accent2, t);
+        job.append(
+            &ch.to_string(),
+            0.0,
+            TextFormat {
+                font_id: font_id.clone(),
+                color,
+                ..Default::default()
+            },
+        );
+    }
+    ui.label(job);
 }
