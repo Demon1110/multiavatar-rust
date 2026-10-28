@@ -18,6 +18,12 @@ eframe = { version = "0.37.0", default-features = false, features = [
     "x11",
 ] }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif"] }   # 预览解码：只用 PNG/JPEG/GIF，裁掉其余 12 种格式解码器
+# 直接声明 epaint 并开启 color_fonts（egui/eframe 未转发该特性）：
+# 让系统彩色 emoji 字体（Segoe UI Emoji / Noto Color Emoji）可彩色渲染
+epaint = { version = "0.37.0", features = ["color_fonts"] }
+# egui 内置单色 emoji 字体（NotoEmoji-Regular + emoji-icon-font）挂在该 feature 下，
+# 默认关闭导致所有 emoji 显示方框；显式开启（与 eframe 引用合并生效）
+egui = { version = "0.37.0", features = ["monochrome_emoji_fonts"] }
 
 # 原生文件保存对话框（桌面三平台；Android 无后端，走内部存储导出）
 [target.'cfg(not(target_os = "android"))'.dependencies]

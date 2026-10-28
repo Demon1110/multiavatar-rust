@@ -6,9 +6,9 @@
 //!   3. 批量生成：为团队、账号、资源批量生成统一风格头像（网格预览 + 目录批量导出）；
 //!   4. 素材复用：复制 data-URI 直接嵌入代码/文档；历史记录一键回选。
 
-use crate::{export, theme};
 use crate::preview::{bitmap_preview, color_image_texture, BitmapPreview, GifPlayer};
 use crate::theme::{Palette, ThemeKind};
+use crate::{export, theme};
 use eframe::egui::{self, Color32, RichText};
 
 /// 预览/导出格式。
@@ -21,7 +21,12 @@ enum PreviewFormat {
 }
 
 impl PreviewFormat {
-    const ALL: [PreviewFormat; 4] = [PreviewFormat::Svg, PreviewFormat::Png, PreviewFormat::Jpg, PreviewFormat::Gif];
+    const ALL: [PreviewFormat; 4] = [
+        PreviewFormat::Svg,
+        PreviewFormat::Png,
+        PreviewFormat::Jpg,
+        PreviewFormat::Gif,
+    ];
     fn label(self) -> &'static str {
         match self {
             PreviewFormat::Svg => "SVG 矢量",
@@ -184,7 +189,7 @@ impl StudioApp {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             ui.add_space(10.0);
-            theme::gradient_heading(ui, "multiavatar Studio", &self.palette);
+            theme::gradient_heading(ui, "multiAvatar Studio", &self.palette);
             ui.add_space(16.0);
             ui.label(
                 RichText::new("跨平台头像生成工作台")
@@ -352,7 +357,11 @@ impl StudioApp {
             }
             ExportKind::Jpg => {
                 let bytes = multiavatar::to_jpg_sized(&name, self.size);
-                export::save_bytes(&bytes, &format!("{base}.jpg"), &[("JPEG", &["jpg", "jpeg"])])
+                export::save_bytes(
+                    &bytes,
+                    &format!("{base}.jpg"),
+                    &[("JPEG", &["jpg", "jpeg"])],
+                )
             }
             ExportKind::Gif => {
                 let bytes = multiavatar::to_gif_sized(&name, self.size);
@@ -404,7 +413,10 @@ impl StudioApp {
             ui.vertical_centered(|ui| {
                 let card = theme::card(&self.palette)
                     .corner_radius(egui::CornerRadius::same(20))
-                    .stroke(egui::Stroke::new(1.5_f32, self.palette.accent.gamma_multiply(0.5)));
+                    .stroke(egui::Stroke::new(
+                        1.5_f32,
+                        self.palette.accent.gamma_multiply(0.5),
+                    ));
                 card.show(ui, |ui| {
                     ui.add_space(8.0);
                     if self.input.trim().is_empty() {
@@ -459,10 +471,7 @@ impl StudioApp {
                                             .corner_radius(egui::CornerRadius::same(16)),
                                     );
                                     let extra = if self.format == PreviewFormat::Svg {
-                                        format!(
-                                            " · SVG {} 字节",
-                                            self.svg_len
-                                        )
+                                        format!(" · SVG {} 字节", self.svg_len)
                                     } else {
                                         String::new()
                                     };
@@ -544,7 +553,9 @@ impl StudioApp {
                                     if ui.button("🖼️ 生成网格").clicked() {
                                         self.generate_grid(ui.ctx());
                                     }
-                                    if !self.grid.is_empty() && ui.button("📁 批量导出 (PNG)").clicked() {
+                                    if !self.grid.is_empty()
+                                        && ui.button("📁 批量导出 (PNG)").clicked()
+                                    {
                                         self.export_grid();
                                     }
                                 });
@@ -570,7 +581,9 @@ impl StudioApp {
                                                             self.grid_size as f32,
                                                             self.grid_size as f32,
                                                         ))
-                                                        .corner_radius(egui::CornerRadius::same(10)),
+                                                        .corner_radius(egui::CornerRadius::same(
+                                                            10,
+                                                        )),
                                                 );
                                                 ui.label(
                                                     RichText::new(name.as_str())
@@ -627,7 +640,14 @@ impl StudioApp {
                 ok += 1;
             }
         }
-        self.set_status(true, format!("批量导出完成：{ok}/{} 个 → {}", self.grid.len(), dir.display()));
+        self.set_status(
+            true,
+            format!(
+                "批量导出完成：{ok}/{} 个 → {}",
+                self.grid.len(),
+                dir.display()
+            ),
+        );
     }
 }
 
@@ -647,9 +667,12 @@ fn sanitize(s: &str) -> String {
     out
 }
 
-/// 探测系统 CJK 字体并注入 egui（Windows/Linux/macOS/Android）。
+/// 探测系统 CJK / 彩色 emoji 字体并注入 egui（Windows/Linux/macOS/Android）。
+///
+/// 顺序：默认字体（含内置单色 emoji 图标）→ CJK → 系统彩色 emoji（最后 fallback）。
+/// 内置 emoji-icon-font 未覆盖的 emoji 走系统字体（需 epaint color_fonts 特性支持彩色渲染）。
 fn install_cjk_fonts(ctx: &egui::Context) {
-    const CANDIDATES: &[&str] = &[
+    const CJK_CANDIDATES: &[&str] = &[
         // Windows
         "C:\\Windows\\Fonts\\msyh.ttc",
         "C:\\Windows\\Fonts\\msyh.ttf",
@@ -666,24 +689,61 @@ fn install_cjk_fonts(ctx: &egui::Context) {
         "/system/fonts/NotoSansCJK-Regular.ttc",
         "/system/fonts/DroidSansFallback.ttf",
     ];
-    for p in CANDIDATES {
+    const EMOJI_CANDIDATES: &[&str] = &[
+        // Windows（COLR 彩色）
+        "C:\\Windows\\Fonts\\SegoeUIEmoji.ttf",
+        // Android（CBDT 彩色位图）
+        "/system/fonts/NotoColorEmoji.ttf",
+        // Linux
+        "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+        "/usr/share/fonts/opentype/noto/NotoColorEmoji.ttf",
+        "/usr/share/fonts/noto/NotoColorEmoji.ttf",
+        "/usr/share/fonts/NotoColorEmoji.ttf",
+        // macOS（ttc 集合，部分环境解析失败则自动跳过）
+        "/System/Library/Fonts/Apple Color Emoji.ttc",
+    ];
+
+    let mut fonts = egui::FontDefinitions::default();
+    let mut injected = false;
+
+    for p in CJK_CANDIDATES {
         if let Ok(bytes) = std::fs::read(p) {
-            let mut fonts = egui::FontDefinitions::default();
-            fonts.font_data.insert(
-                "cjk".to_owned(),
-                egui::FontData::from_owned(bytes).into(),
-            );
-            for family in [
-                egui::FontFamily::Proportional,
-                egui::FontFamily::Monospace,
-            ] {
-                fonts.families.entry(family).or_default().push("cjk".to_owned());
+            fonts
+                .font_data
+                .insert("cjk".to_owned(), egui::FontData::from_owned(bytes).into());
+            for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+                fonts
+                    .families
+                    .entry(family)
+                    .or_default()
+                    .push("cjk".to_owned());
             }
-            ctx.set_fonts(fonts);
-            return;
+            injected = true;
+            break;
         }
     }
-    // 找不到中文字体时回退默认（英文可用，中文显示方块）
+    // 彩色 emoji：放 CJK 之后做最后 fallback（egui 先匹配内置单色图标，缺失才落到系统彩色）
+    for p in EMOJI_CANDIDATES {
+        if let Ok(bytes) = std::fs::read(p) {
+            fonts
+                .font_data
+                .insert("emoji".to_owned(), egui::FontData::from_owned(bytes).into());
+            for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+                fonts
+                    .families
+                    .entry(family)
+                    .or_default()
+                    .push("emoji".to_owned());
+            }
+            injected = true;
+            break;
+        }
+    }
+
+    if injected {
+        ctx.set_fonts(fonts);
+    }
+    // 全都没找到时回退默认（内置单色 emoji 仍可用，中文/部分彩色 emoji 可能缺失）
 }
 
 impl eframe::App for StudioApp {
@@ -695,12 +755,18 @@ impl eframe::App for StudioApp {
 
         self.ensure_preview(&ctx);
         egui::Panel::top("top").show(ui, |ui| self.top_bar(ui));
-        egui::Panel::left("left").default_size(310.0).resizable(true).show(ui, |ui| {
-            self.left_panel(ui);
-        });
-        egui::Panel::bottom("bottom").resizable(true).default_size(220.0).show(ui, |ui| {
-            self.bottom_panel(ui);
-        });
+        egui::Panel::left("left")
+            .default_size(310.0)
+            .resizable(true)
+            .show(ui, |ui| {
+                self.left_panel(ui);
+            });
+        egui::Panel::bottom("bottom")
+            .resizable(true)
+            .default_size(220.0)
+            .show(ui, |ui| {
+                self.bottom_panel(ui);
+            });
         // 注意：CentralPanel 必须最后 show——0.37 的 Panel 从 available_rect 即取即切，
         // 若提前占用，会吃掉 bottom/left 面板的空间（批量区消失）
         egui::CentralPanel::default().show(ui, |ui| {
