@@ -9,14 +9,14 @@ publish = false
 
 [dependencies]
 multiavatar = { path = ".." }
-eframe = "0.32"          # egui 框架：Windows / Linux / macOS / Android / Web
-image = "0.25"           # 预览解码：PNG/JPEG/GIF（位图 + GIF 帧动画）
+eframe = "0.37.0"          # egui 框架：Windows / Linux / macOS / Android / Web
+image = "0.25.10"           # 预览解码：PNG/JPEG/GIF（位图 + GIF 帧动画）
 
 # 原生文件保存对话框（桌面三平台；Android 无后端，走内部存储导出）
 [target.'cfg(not(target_os = "android"))'.dependencies]
-rfd = "0.15"
+rfd = "0.17.2"
 
 # Android：eframe 需要原生窗口后端（cargo-ndk / cargo-apk 构建时生效）；
-# 与上方 eframe="0.32" 合并声明，仅 android target 追加该特性。
+# 与上方 eframe 声明合并，仅 android target 追加该特性。
 [target.'cfg(target_os = "android")'.dependencies]
-eframe = { version = "0.32", features = ["android-native-activity"] }
+eframe = { version = "0.37.0", features = ["android-native-activity"] }

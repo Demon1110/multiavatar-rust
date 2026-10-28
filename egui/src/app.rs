@@ -179,51 +179,50 @@ impl StudioApp {
     }
 
     // ---- 顶部栏 ----
-    fn top_bar(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::top("top").show(ctx, |ui| {
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                ui.add_space(10.0);
-                theme::gradient_heading(ui, "multiavatar Studio", &self.palette);
-                ui.add_space(16.0);
-                ui.label(
-                    RichText::new("跨平台头像生成工作台")
-                        .size(13.0)
-                        .color(self.palette.text_dim),
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+    fn top_bar(&mut self, ui: &mut egui::Ui) {
+        let ctx = ui.ctx().clone();
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            ui.add_space(10.0);
+            theme::gradient_heading(ui, "multiavatar Studio", &self.palette);
+            ui.add_space(16.0);
+            ui.label(
+                RichText::new("跨平台头像生成工作台")
+                    .size(13.0)
+                    .color(self.palette.text_dim),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .button(RichText::new("🎲 随机").color(self.palette.accent))
+                    .clicked()
+                {
+                    self.input = self.random_name();
+                    self.push_history();
+                    self.set_status(true, format!("随机生成：{}", self.input));
+                }
+                ui.add_space(6.0);
+                for k in ThemeKind::ALL {
+                    let selected = self.theme == k;
                     if ui
-                        .button(RichText::new("🎲 随机").color(self.palette.accent))
+                        .selectable_label(selected, RichText::new(k.label()).size(13.0))
                         .clicked()
                     {
-                        self.input = self.random_name();
-                        self.push_history();
-                        self.set_status(true, format!("随机生成：{}", self.input));
+                        self.theme = k;
+                        theme::apply(&ctx, k);
+                        self.palette = Palette::for_kind(k);
                     }
-                    ui.add_space(6.0);
-                    for k in ThemeKind::ALL {
-                        let selected = self.theme == k;
-                        if ui
-                            .selectable_label(selected, RichText::new(k.label()).size(13.0))
-                            .clicked()
-                        {
-                            self.theme = k;
-                            theme::apply(ctx, k);
-                            self.palette = Palette::for_kind(k);
-                        }
-                    }
-                });
+                }
             });
-            ui.add_space(8.0);
         });
+        ui.add_space(8.0);
     }
 
     // ---- 左栏：输入 / 尺寸 / 格式 / 导出 / 历史 ----
-    fn left_panel(&mut self, ctx: &egui::Context) {
-        egui::SidePanel::left("left")
-            .default_width(310.0)
+    fn left_panel(&mut self, ui: &mut egui::Ui) {
+        egui::Panel::left("left")
+            .default_size(310.0)
             .resizable(true)
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                     // 输入
                     theme::card(&self.palette).show(ui, |ui| {
@@ -379,8 +378,9 @@ impl StudioApp {
     }
 
     // ---- 中央：大预览 ----
-    fn center(&mut self, ctx: &egui::Context) {
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn center(&mut self, ui: &mut egui::Ui) {
+        egui::CentralPanel::default().show(ui, |ui| {
+            let ctx = ui.ctx().clone();
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.label(
@@ -426,7 +426,7 @@ impl StudioApp {
                                     if idx != self.gif_frame_idx || self.gif_texture.is_none() {
                                         self.gif_frame_idx = idx;
                                         self.gif_texture = Some(color_image_texture(
-                                            ctx,
+                                            &ctx,
                                             gif.image(idx),
                                             &format!("gif-frame-{idx}"),
                                         ));
@@ -511,11 +511,11 @@ impl StudioApp {
     }
 
     // ---- 底部：批量生成 ----
-    fn bottom_panel(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::bottom("bottom")
+    fn bottom_panel(&mut self, ui: &mut egui::Ui) {
+        egui::Panel::bottom("bottom")
             .resizable(true)
-            .default_height(220.0)
-            .show(ctx, |ui| {
+            .default_size(220.0)
+            .show(ui, |ui| {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     theme::gradient_heading(ui, "批量生成", &self.palette);
@@ -542,7 +542,7 @@ impl StudioApp {
                                 );
                                 ui.horizontal(|ui| {
                                     if ui.button("🖼️ 生成网格").clicked() {
-                                        self.generate_grid(ctx);
+                                        self.generate_grid(ui.ctx());
                                     }
                                     if !self.grid.is_empty() && ui.button("📁 批量导出 (PNG)").clicked() {
                                         self.export_grid();
@@ -687,14 +687,22 @@ fn install_cjk_fonts(ctx: &egui::Context) {
 }
 
 impl eframe::App for StudioApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    // eframe 0.37：App::ui 接收根 Ui（无 margin/背景），面板通过 ui 嵌套
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
         // 全屏渐变背景（最底层，面板半透明透出）
-        theme::paint_background(ctx, &self.palette, ctx.input(|i| i.time));
+        theme::paint_background(&ctx, &self.palette, ctx.input(|i| i.time));
 
-        self.ensure_preview(ctx);
-        self.top_bar(ctx);
-        self.left_panel(ctx);
-        self.center(ctx);
-        self.bottom_panel(ctx);
+        self.ensure_preview(&ctx);
+        egui::Panel::top("top").show(ui, |ui| self.top_bar(ui));
+        egui::Panel::left("left").default_size(310.0).resizable(true).show(ui, |ui| {
+            self.left_panel(ui);
+        });
+        egui::CentralPanel::default().show(ui, |ui| {
+            self.center(ui);
+        });
+        egui::Panel::bottom("bottom").resizable(true).default_size(220.0).show(ui, |ui| {
+            self.bottom_panel(ui);
+        });
     }
 }

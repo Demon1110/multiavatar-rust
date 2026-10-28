@@ -106,7 +106,11 @@ pub fn apply(ctx: &egui::Context, kind: ThemeKind) {
     visuals.widgets.active.corner_radius = CornerRadius::same(10);
     ctx.set_visuals(visuals);
 
-    let mut style = (*ctx.style()).clone();
+    let egui_theme = match kind {
+        ThemeKind::Light => egui::Theme::Light,
+        _ => egui::Theme::Dark,
+    };
+    let mut style = (*ctx.style_of(egui_theme)).clone();
     style.spacing.item_spacing = egui::vec2(10.0, 10.0);
     style.spacing.button_padding = egui::vec2(16.0, 9.0);
     style.spacing.window_margin = Margin::same(10);
@@ -122,13 +126,13 @@ pub fn apply(ctx: &egui::Context, kind: ThemeKind) {
         TextStyle::Button,
         FontId::proportional(15.0),
     );
-    ctx.set_style(style);
+    ctx.set_style_of(egui_theme, style);
 }
 
 /// 全屏渐变背景 + 装饰光斑（画在 background layer，面板半透明透出）。
 pub fn paint_background(ctx: &egui::Context, pal: &Palette, _t: f64) {
     let painter = ctx.layer_painter(egui::LayerId::background());
-    let rect = ctx.screen_rect();
+    let rect = ctx.content_rect();
 
     // 垂直渐变（分条插值，避免依赖已被移除的 mesh gradient API）
     const BANDS: usize = 28;
