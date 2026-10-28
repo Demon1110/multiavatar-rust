@@ -211,7 +211,7 @@ impl StudioApp {
                 }
                 ui.add_space(6.0);
                 for k in ThemeKind::ALL {
-                    let selected = self.theme == k;
+                    let selected: bool = self.theme == k;
                     if ui
                         .selectable_label(selected, RichText::new(k.label()).size(13.0))
                         .clicked()
@@ -527,7 +527,7 @@ impl StudioApp {
     fn bottom_panel(&mut self, ui: &mut egui::Ui) {
         egui::Panel::bottom("bottom")
             .resizable(true)
-            .default_size(300.0) // 给批量区更多垂直空间（面板顶边相应上移）
+            .default_size(220.0) // 给批量区更多垂直空间（面板顶边相应上移）
             // 面板自身不填充、无描边、无分隔线：批量区顶部不再有任何横线
             // （只保留内部卡片自己的描边线）
             .frame(egui::Frame::NONE)
