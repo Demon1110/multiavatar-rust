@@ -56,7 +56,18 @@ cargo build -p multiavatar-studio --release
 # 产物：target/release/multiavatar-studio(.exe)
 ```
 
-中文字体自动探测系统字体（Windows 微软雅黑 / macOS 苹方 / Linux Noto CJK / Android 系统字体），无需打包字体，保持二进制体积最小（当前 release 约 5.2 MB）。
+### Windows 发布版加壳（UPX）
+
+```bash
+# 安装 UPX 后执行（产物约 5.3MB -> 1.7MB，压缩到 32%）
+winget install UPX.UPX
+powershell -ExecutionPolicy Bypass -File scripts/upx-pack.ps1 -Test
+```
+
+exe 图标：`assets/app.ico` 由 `cargo run --example gen_icon` 用库自生成，
+`build.rs` 在 Windows 构建时自动嵌入；窗口/任务栏图标在 `main.rs` 运行时设置。
+
+中文字体自动探测系统字体（Windows 微软雅黑 / macOS 苹方 / Linux Noto CJK / Android 系统字体），无需打包字体，保持二进制体积最小（当前 release 约 5.2 MB，UPX 后约 1.7 MB）。
 
 ## 跨平台构建
 
