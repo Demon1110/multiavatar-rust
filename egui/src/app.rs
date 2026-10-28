@@ -527,8 +527,11 @@ impl StudioApp {
     fn bottom_panel(&mut self, ui: &mut egui::Ui) {
         egui::Panel::bottom("bottom")
             .resizable(true)
-            .default_size(220.0)
-            .show_separator_line(false) // 去掉面板自带分隔线，只保留卡片描边（避免顶部两条线）
+            .default_size(300.0) // 给批量区更多垂直空间（面板顶边相应上移）
+            // 面板自身不填充、无描边、无分隔线：批量区顶部不再有任何横线
+            // （只保留内部卡片自己的描边线）
+            .frame(egui::Frame::NONE)
+            .show_separator_line(false)
             .show(ui, |ui| {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
@@ -550,7 +553,7 @@ impl StudioApp {
                             ui.vertical(|ui| {
                                 ui.add(
                                     egui::TextEdit::multiline(&mut self.batch_text)
-                                        .desired_rows(4)
+                                        .desired_rows(6)
                                         .desired_width(260.0)
                                         .hint_text("每行一个名字"),
                                 );
