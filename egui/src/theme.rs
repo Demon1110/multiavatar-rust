@@ -81,6 +81,15 @@ fn lerp(a: Color32, b: Color32, t: f32) -> Color32 {
 pub fn apply(ctx: &egui::Context, kind: ThemeKind) {
     let pal = Palette::for_kind(kind);
 
+    let egui_theme = match kind {
+        ThemeKind::Light => egui::Theme::Light,
+        _ => egui::Theme::Dark,
+    };
+    // 关键：先切换当前主题。0.37 下 set_visuals/set_style_of 按主题存储，
+    // 渲染用的 style/visuals 取决于 ctx.theme()；不切换则与系统默认主题
+    // （如浅色）错配，导致刚打开时主题"乱的"、点主题按钮后才正常。
+    ctx.set_theme(egui_theme);
+
     let mut visuals = match kind {
         ThemeKind::Light => egui::Visuals::light(),
         _ => egui::Visuals::dark(),
@@ -104,12 +113,9 @@ pub fn apply(ctx: &egui::Context, kind: ThemeKind) {
     visuals.widgets.active.bg_fill = pal.accent.gamma_multiply(0.30);
     visuals.widgets.active.fg_stroke = Stroke::new(1.5_f32, pal.accent);
     visuals.widgets.active.corner_radius = CornerRadius::same(10);
-    ctx.set_visuals(visuals);
+    // set_visuals_of 显式绑定主题，不依赖 ctx.theme()（与上面 set_theme 双保险）
+    ctx.set_visuals_of(egui_theme, visuals);
 
-    let egui_theme = match kind {
-        ThemeKind::Light => egui::Theme::Light,
-        _ => egui::Theme::Dark,
-    };
     let mut style = (*ctx.style_of(egui_theme)).clone();
     style.spacing.item_spacing = egui::vec2(10.0, 10.0);
     style.spacing.button_padding = egui::vec2(16.0, 9.0);
