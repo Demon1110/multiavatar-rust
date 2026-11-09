@@ -92,21 +92,31 @@ pub fn to_ico(svg: &str, sizes: &[u32]) -> Vec<u8> {
     let sizes = if sizes.is_empty() { &DEFAULT_SIZES } else { sizes };
     let doc = SvgParser::parse(svg);
     // 先渲染全部 PNG，确定每个条目的字节数与偏移
-    let pngs: Vec<Vec<u8>> = sizes
+    let entries: Vec<(u32, Vec<u8>)> = sizes
         .iter()
         .map(|size| {
             let pixmap = SvgRasterizer::rasterize(&doc, *size).expect("ICO PNG 光栅化失败");
-            to_png(&pixmap)
+            (*size, to_png(&pixmap))
         })
         .collect();
+    pack_ico(&entries)
+}
 
-    let mut offset: u32 = 6 + 16 * sizes.len() as u32; // ICONDIR(6B) + ICONDIRENTRY×N(16B)
-    let mut bos = Vec::with_capacity(offset as usize + 64 * 1024);
+/// 把「边长 + PNG 字节」序列打包为单文件 ICO 字节。
+///
+/// 容器：ICONDIR(6B) + ICONDIRENTRY×N(16B) + 各条目 PNG 原始数据；
+/// 条目顺序即输出顺序，边长 ≥256 按规范写 0（0 表示 256）。
+/// 尺寸合法性（1..=256）由调用方校验，这里只负责容器结构。
+pub fn pack_ico(entries: &[(u32, Vec<u8>)]) -> Vec<u8> {
+    let dir_len = 6 + 16 * entries.len() as u32; // ICONDIR + ICONDIRENTRY×N
+    let total: usize = dir_len as usize + entries.iter().map(|(_, png)| png.len()).sum::<usize>();
+    let mut offset = dir_len;
+    let mut bos = Vec::with_capacity(total);
     // ICONDIR：reserved=0, type=1(icon), count
     write_le16(&mut bos, 0);
     write_le16(&mut bos, 1);
-    write_le16(&mut bos, sizes.len() as u16);
-    for (i, size) in sizes.iter().enumerate() {
+    write_le16(&mut bos, entries.len() as u16);
+    for (size, png) in entries {
         let s = *size;
         bos.push(if s >= 256 { 0 } else { s as u8 }); // width（0 表示 256）
         bos.push(if s >= 256 { 0 } else { s as u8 }); // height（0 表示 256）
@@ -114,11 +124,11 @@ pub fn to_ico(svg: &str, sizes: &[u32]) -> Vec<u8> {
         bos.push(0); // reserved
         write_le16(&mut bos, 1); // planes
         write_le16(&mut bos, 32); // bitCount
-        write_le32(&mut bos, pngs[i].len() as u32); // bytesInRes
+        write_le32(&mut bos, png.len() as u32); // bytesInRes
         write_le32(&mut bos, offset); // imageOffset
-        offset += pngs[i].len() as u32;
+        offset += png.len() as u32;
     }
-    for png in &pngs {
+    for (_, png) in entries {
         bos.extend_from_slice(png);
     }
     bos

@@ -20,6 +20,7 @@ Multiavatar 的**纯 Rust 全功能移植**（原始 JavaScript：[multiavatar.j
 | 确定性 | 同输入永远同头像（SHA-256 → 12 位种子 → 部件映射） |
 | 多语言 | ASCII / CJK / emoji 输入均可 |
 | 多输出 | SVG、PNG（透明）、JPEG（白底）、GIF（部件逐帧淡入动画）、favicon zip、favicon.ico、data URI |
+| 通用图标 | 任意 PNG（灰度/RGB/索引/RGBA、1-16 位深、tRNS 透明）→ 指定尺寸的多尺寸 ICO，等比居中、alpha 保留 |
 | 体积优化 | 坐标精度裁剪（近无损，SVG 文本可减 20-40%），可开关 |
 | LRU 缓存 | 同输入重复生成免重复计算（容量 128，键不含尺寸/格式） |
 | 零运行时文件 | 部件库 gzip 嵌入二进制，单库交付 |
@@ -58,6 +59,11 @@ let uri = to_data_uri("Binx Bond");     // data:image/png;base64,...
 let zip = to_favicon_zip("Binx Bond");  // 16/32/48/64/128/256 → avatar-{size}.png
 let ico = to_favicon_ico("Binx Bond");  // 单文件 .ico
 
+// 任意 PNG → 多尺寸 ICO（源图不必来自本库；非正方形会等比居中、留透明边）
+let src = std::fs::read("logo.png")?;
+let icon = png_to_ico(&src, &[16, 32, 48, 256])?;  // 自定义尺寸，1..=256
+write_png_ico("logo.png", "logo.ico", &[])?;       // 空尺寸 = 默认 16/32/48/64/128/256
+
 // 写文件
 write_png("Binx Bond", "avatar.png")?;
 write_favicon_ico("Binx Bond", "favicon.ico")?;
@@ -78,6 +84,7 @@ let png512 = avatar.png_sized(512);
 
 ```bash
 cargo run --example demo     # 输出到 demo/（10 组 × svg/png/jpg/gif + favicon + preview_grid.png）
+cargo run --example png_to_ico -- logo.png logo.ico 16 32 48 64 128 256   # 任意 PNG → ICO
 ```
 
 ---
@@ -95,8 +102,9 @@ cargo run --example demo     # 输出到 demo/（10 组 × svg/png/jpg/gif + fav
 | `to_image_smooth`(+`_with`) / `to_png_smooth`(+`_sized`) / `to_jpg_smooth`(+`_sized`) | — | **SSAA 超采样抗锯齿**：内部按 `size×4` 渲染后双线性缩小，曲线边缘更平滑（小尺寸放大场景消除锯齿） |
 | `to_data_uri`(+`_sized`) | `toDataUri` | `data:image/png;base64,...` |
 | `to_favicon_zip / to_favicon_ico`(+`_sized`) | `toFaviconZip / toFaviconIco` | 多尺寸打包 |
+| `png_to_ico(png, sizes)` | — | **任意 PNG → 多尺寸 ICO**（自带解码/重采样，返回 `Result`） |
 | `render(input, format, options)` | `Multiavatar.render(...)` | 统一策略入口 |
-| `write_png / write_favicon_zip / write_favicon_ico` | `writePng / ...` | 写文件 |
+| `write_png / write_favicon_zip / write_favicon_ico / write_png_ico` | `writePng / ...` | 写文件 |
 | `cache_size / clear_cache` | `cacheSize / clearCache` | LRU 缓存 |
 
 ---
@@ -167,11 +175,12 @@ cargo run --example demo     # 输出到 demo/（10 组 × svg/png/jpg/gif + fav
 ## 测试 Tests
 
 ```bash
-cargo test          # 单测 32 + 集成 14 + doc 1 ≈ 47 项
+cargo test          # 单测 51 + 集成 28 + doc 1 ≈ 80 项
 cargo clippy        # 静态检查
 ```
 
 覆盖：哈希/映射/舍入/优化器单测；SVG 奇偶锚点；PNG/JPEG/GIF/favicon/ICO/data URI 格式魔数与结构；
+任意 PNG → ICO（灰度/RGB/索引+8/16 位深/tRNS/非正方形留边/放大/非法输入/文件 API）；
 空输入；强制角色主题；LRU 缓存键语义（不含 size/format）；GIF 首帧可预览（完整头像）。
 
 ---
@@ -182,7 +191,7 @@ cargo clippy        # 静态检查
 cargo build --release   # LTO + codegen-units=1 + strip（体积优化）
 ```
 
-依赖（允许常用 crate，均纯跨平台）：`flate2 crc32fast roxmltree tiny-skia jpeg-encoder gif`。SHA-256、SVG 体积优化器、PNG 编码器、ZIP 打包器、base64 与 LRU 缓存均为手写实现（零正则/零哈希/零 png/零 zip/零 base64/零 lru crate 依赖；png/zip/base64 仅作为 dev-dependencies 供测试独立解码验证）。
+依赖（允许常用 crate，均纯跨平台）：`flate2 crc32fast roxmltree tiny-skia jpeg-encoder gif`。SHA-256、SVG 体积优化器、PNG 编码/解码器、ICO/ZIP 打包器、base64 与 LRU 缓存均为手写实现（零正则/零哈希/零 png/零 zip/零 base64/零 lru crate 依赖；png/zip/base64 仅作为 dev-dependencies 供测试独立解码验证）。
 
 ## WASM / npm（浏览器端生成）
 
@@ -205,7 +214,7 @@ const svg = toSvg("demon1110");
 const png = toPng("demon1110", 256); // Uint8Array → Blob/URL.createObjectURL
 ```
 
-JS API：`toSvg(input)`、`toPng(input, size)`、`toJpg(input, size)`、`toGif(input, size)`、`toDataUri(input, size)`、`toFaviconZip(input)`、`toFaviconIco(input)`（TS 类型见 `wasm/dist/multiavatar.d.ts`）。
+JS API：`toSvg(input)`、`toPng(input, size)`、`toJpg(input, size)`、`toGif(input, size)`、`toDataUri(input, size)`、`toFaviconZip(input)`、`toFaviconIco(input)`、`pngToIco(png, sizes)`（TS 类型见 `wasm/dist/multiavatar.d.ts`）。
 
 体积：`multiavatar_bg.wasm` ≈ 594 KB（gzip 后 ≈ 232 KB），建议动态 import 按需加载。
 

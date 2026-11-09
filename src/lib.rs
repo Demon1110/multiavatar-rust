@@ -325,6 +325,27 @@ pub fn to_favicon_ico_sized(input: &str, sizes: &[u32]) -> Vec<u8> {
     render::favicons::to_ico(&svg, sizes)
 }
 
+/// 通用 PNG 字节 → 多尺寸 ICO 字节（与输入字符串无关，源是自己提供的图片）。
+///
+/// - 支持颜色类型 0（灰度）/2（RGB）/3（索引）/4（灰度+alpha）/6（RGBA）、
+///   位深 1/2/4/8/16、tRNS 透明；隔行（Adam7）PNG 会明确报错
+/// - 每个尺寸都等比 contain 缩放到正方形并居中，四周空白透明，alpha 全程保留
+/// - `sizes` 为空用默认 16/32/48/64/128/256；每项须在 `1..=256`，重复项自动去重
+///
+/// 与 [`to_favicon_ico`] 的分工：后者从用户字符串生成头像再打包；
+/// 本函数把任意 PNG（截图、设计稿、生成的 avatar.png）转成图标文件。
+///
+/// ```
+/// let png = multiavatar::to_png("Binx Bond");
+/// let ico = multiavatar::png_to_ico(&png, &[16, 32]).unwrap();
+/// assert_eq!(&ico[0..2], &[0, 0]); // ICONDIR.reserved
+/// assert_eq!(&ico[2..4], &[1, 0]); // ICONDIR.type = icon
+/// assert_eq!(&ico[4..6], &[2, 0]); // 条目数
+/// ```
+pub fn png_to_ico(png: &[u8], sizes: &[u32]) -> Result<Vec<u8>, render::png_ico::PngToIcoError> {
+    render::png_ico::to_ico(png, sizes)
+}
+
 /// 按格式渲染（统一策略入口）。
 ///
 /// 等价 Java `render(input, format, options)`：Svg → 文本字节；
@@ -367,6 +388,19 @@ pub fn write_favicon_zip(input: &str, path: impl AsRef<Path>) -> io::Result<()> 
 pub fn write_favicon_ico(input: &str, path: impl AsRef<Path>) -> io::Result<()> {
     let bytes = to_favicon_ico(input);
     std::fs::write(path, bytes)
+}
+
+/// 通用 PNG → ICO 写文件：读 `png_path` 的 PNG，按 `sizes` 生成并写入 `ico_path`。
+///
+/// PNG 解码/尺寸非法以 `io::ErrorKind::InvalidData` 返回。
+pub fn write_png_ico(
+    png_path: impl AsRef<Path>,
+    ico_path: impl AsRef<Path>,
+    sizes: &[u32],
+) -> io::Result<()> {
+    let png = std::fs::read(png_path)?;
+    let ico = png_to_ico(&png, sizes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    std::fs::write(ico_path, ico)
 }
 
 // ---------------------------------------------------------------------------
@@ -456,7 +490,7 @@ pub mod wasm {
     use wasm_bindgen::prelude::*;
 
     use crate::{
-        multiavatar, to_data_uri_sized, to_favicon_ico, to_favicon_zip, to_gif_sized,
+        multiavatar, png_to_ico, to_data_uri_sized, to_favicon_ico, to_favicon_zip, to_gif_sized,
         to_jpg_sized, to_png_sized,
     };
 
@@ -500,5 +534,12 @@ pub mod wasm {
     #[wasm_bindgen]
     pub fn toFaviconIco(input: &str) -> Vec<u8> {
         to_favicon_ico(input)
+    }
+
+    /// 任意 PNG 字节 → 多尺寸 ICO 字节（Uint8Array）。
+    /// `sizes` 传空数组用默认尺寸；PNG 非法或尺寸越界抛 JS 异常。
+    #[wasm_bindgen]
+    pub fn pngToIco(png: Vec<u8>, sizes: Vec<u32>) -> Result<Vec<u8>, JsError> {
+        png_to_ico(&png, &sizes).map_err(|e| JsError::new(&e.to_string()))
     }
 }

@@ -12,23 +12,29 @@ use tiny_skia::Pixmap;
 
 /// 编码为 PNG 字节。
 pub fn to_png(pixmap: &Pixmap) -> Vec<u8> {
-    let w = pixmap.width();
-    let h = pixmap.height();
-    let rgba = to_rgba8(pixmap);
+    to_png_from_rgba8(pixmap.width(), pixmap.height(), &to_rgba8(pixmap))
+}
+
+/// 直通（straight）RGBA8 像素 → PNG 字节。
+///
+/// `rgba` 长度须为 `width * height * 4`；每行前缀 filter 0（None），整体一个 zlib 流。
+/// 与 [`to_png`] 同一套 chunk 写法，供已有像素数据（如解码后的 PNG）直接重新编码。
+pub fn to_png_from_rgba8(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
+    debug_assert_eq!(rgba.len(), width as usize * height as usize * 4);
 
     let mut out = Vec::with_capacity(rgba.len() + 64);
     // PNG 签名
     out.extend_from_slice(&[137, 80, 78, 71, 13, 10, 26, 10]);
     // IHDR：宽/高/位深8/颜色类型6(RGBA)/压缩0/过滤0/隔行0
     let mut ihdr = Vec::with_capacity(13);
-    ihdr.extend_from_slice(&w.to_be_bytes());
-    ihdr.extend_from_slice(&h.to_be_bytes());
+    ihdr.extend_from_slice(&width.to_be_bytes());
+    ihdr.extend_from_slice(&height.to_be_bytes());
     ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
     write_chunk(&mut out, b"IHDR", &ihdr);
 
     // IDAT：每行前缀 filter 0（None），整体 zlib 压缩
-    let mut raw = Vec::with_capacity(rgba.len() + h as usize);
-    for row in rgba.chunks_exact(w as usize * 4) {
+    let mut raw = Vec::with_capacity(rgba.len() + height as usize);
+    for row in rgba.chunks_exact(width as usize * 4) {
         raw.push(0);
         raw.extend_from_slice(row);
     }

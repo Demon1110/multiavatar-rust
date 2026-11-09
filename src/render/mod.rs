@@ -8,6 +8,8 @@ pub mod png_avatar_renderer;
 pub mod jpg_avatar_renderer;
 pub mod gif_avatar_renderer;
 pub mod png_writer;
+pub mod png_reader;
+pub mod png_ico;
 pub mod jpg_writer;
 pub mod gif_writer;
 pub mod favicons;
