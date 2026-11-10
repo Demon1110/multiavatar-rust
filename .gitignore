@@ -12,6 +12,7 @@ Cargo.lock
 
 # IDE / 编辑器
 .idea/
+.openidea/
 .vscode/
 *.iml
 *.swp
